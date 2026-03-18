@@ -1,0 +1,118 @@
+requirement:
+  id: PRD-001
+  name: sample_feature
+  summary: Sample requirement synchronized from Flutter into iOS
+  acceptance_criteria:
+    - Sample screen opens
+    - Retry restores content after an error
+
+mode: feature_sync
+sync_strategy: scoped_patch
+
+source:
+  flutter_paths:
+    - lib/features/sample_feature/
+  change_basis:
+    - prd
+    - flutter_digest
+    - flutter_code
+    - flutter_pr_diff
+    - flutter_tests
+  change_ref: sample/change-id
+  prd_path: docs/prd/sample_feature.md
+  pr_diff_path: artifacts/flutter_pr.diff
+  tests_paths:
+    - test/sample_page_test.dart
+  notes:
+    - Flutter requirement scope spans multiple implementation files.
+
+target:
+  platform: ios
+  language: swift
+  ui_framework: uikit
+  repo_root: ../native-ios
+  profile_path: .ai/t2n/native-profile-v2
+  module_hint: Sample
+  write_mode: apply_after_approval
+
+behavior:
+  user_flows:
+    - open_sample
+    - retry_after_error
+  acceptance_points:
+    - sample screen opens
+    - retry restores content after an error
+  states:
+    - name: loading
+      kind: loading
+    - name: loaded
+      kind: success
+    - name: load_failed
+      kind: error
+      notes:
+        - Retry should be available after request failure.
+  interactions:
+    - tap_retry
+    - open_sample_detail
+  strings:
+    - sample_title
+    - retry_button
+  assets:
+    - images/sample_banner.png
+
+flutter_evidence:
+  screens:
+    - SamplePage
+  representative_screens:
+    - name: SamplePage
+      path: lib/features/sample_feature/sample_page.dart
+      role: primary_screen
+      confidence: 0.88
+  state_holders:
+    - SampleBloc
+  api_calls:
+    - getSample
+  models:
+    - SampleModel
+  tests:
+    - sample_page_test.dart
+  key_files:
+    - lib/features/sample_feature/sample_page.dart
+    - lib/features/sample_feature/sample_bloc.dart
+
+native_impact:
+  existing_files:
+    - SampleViewController.swift
+  new_files:
+    - SampleHeaderView.swift
+  registration_points:
+    - AppRouter.swift
+  risk_files:
+    - path: AppRouter.swift
+      risk: high
+      reason: Global routing integration may affect app-wide behavior.
+  selected_touchpoints:
+    - path: SampleViewController.swift
+      kind: feature_screen
+      confidence: high
+      reason: Hosts the sample feature UI flow.
+      risk: medium
+      ui_role: primary_screen
+      source_screens:
+        - SamplePage
+
+patch_plan:
+  create:
+    - SampleHeaderView.swift
+  update:
+    - SampleViewController.swift
+  manual_candidates:
+    - AppRouter.swift
+  deferred_items:
+    - Advanced transition animation parity
+
+unsupported:
+  - Advanced custom animation
+
+notes:
+  - Initial V1 plan uses scoped patching rather than full feature regeneration.

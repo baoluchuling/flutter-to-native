@@ -1,0 +1,57 @@
+requirement:
+  id: PRD-123
+  name: feature_foo
+
+operation_policy:
+  execution_mode: plan_then_confirm_then_apply
+  auto_apply_confidence: high
+  manual_when:
+    - action=manual_review
+    - risk=high
+    - confidence=low
+    - ui_role=registration_point
+
+operations:
+  -
+    operation_id: op_01
+    action: edit_existing
+    target_path: anyshort/swift/FeatureFoo/Controller/FeatureFooViewController.swift
+    target_kind: feature_screen
+    ui_role: primary_screen
+    confidence: high
+    risk: low
+    source_screens:
+      - FeatureFooPage
+    intent_links:
+      - open_feature_foo
+      - tap_primary_action
+    reason: Matched Flutter primary screen and interaction flow.
+  -
+    operation_id: op_02
+    action: edit_existing
+    target_path: anyshort/swift/FeatureFoo/View/FeatureFooActionView.swift
+    target_kind: feature_view
+    ui_role: component_view
+    confidence: medium
+    risk: low
+    source_screens:
+      - FeatureFooPage
+    intent_links:
+      - tap_primary_action
+    reason: Supports CTA rendering and interaction wiring.
+  -
+    operation_id: op_03
+    action: manual_review
+    target_path: anyshort/swift/App/AppRouter.swift
+    target_kind: registration_point
+    ui_role: registration_point
+    confidence: low
+    risk: high
+    source_screens:
+      []
+    intent_links:
+      - open_feature_foo
+    reason: Route registration touches app-level entry.
+
+manual_candidates:
+  - anyshort/swift/App/AppRouter.swift

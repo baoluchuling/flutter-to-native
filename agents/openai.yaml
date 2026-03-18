@@ -1,0 +1,4 @@
+interface:
+  display_name: "T2N Atlas"
+  short_description: "Profile iOS UIKit repos, plan scoped sync, then apply and verify Flutter requirements"
+  default_prompt: "Profile the target iOS Swift UIKit repository into .ai/t2n, analyze the PRD plus Flutter code, PR diff, and tests, build a requirement sync contract, generate a reviewable sync plan, apply only after approval, and verify the result with optional Swift parse checks."

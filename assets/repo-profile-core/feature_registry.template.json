@@ -1,0 +1,38 @@
+[
+  {
+    "feature_id": "feature.book_detail",
+    "name": "Book Detail",
+    "description": "Book detail page presentation and related user interactions.",
+    "aliases": [
+      "book detail",
+      "detail"
+    ],
+    "related_features": [
+      "feature.reader",
+      "feature.tts_playback"
+    ],
+    "status": "active",
+    "source_refs": [
+      "native-profile-v2"
+    ],
+    "last_seen_commit": "HEAD"
+  },
+  {
+    "feature_id": "feature.tts_playback",
+    "name": "TTS Playback",
+    "description": "Audio playback controls, state sync, and resume behavior.",
+    "aliases": [
+      "playback",
+      "tts"
+    ],
+    "related_features": [
+      "feature.book_detail",
+      "feature.history"
+    ],
+    "status": "active",
+    "source_refs": [
+      "native-profile-v2"
+    ],
+    "last_seen_commit": "HEAD"
+  }
+]
