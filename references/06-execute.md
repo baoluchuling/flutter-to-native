@@ -35,6 +35,22 @@
 - `flutter/flutter_changes.md`
 - 本次 `pr_diff` 原文（必要时回读具体 Flutter 文件）
 
+## 依赖预检（Step A 之前，强制执行）
+
+在生成实现计划之前，检查 Flutter 变更是否引入了 Native 端尚未集成的外部依赖：
+
+1. **扫描 Flutter diff**：从 `flutter_changes.md` 或 `pr_diff` 中提取新增的 `pubspec.yaml` 依赖项（`dependencies` / `dev_dependencies` 中新增的包）
+2. **映射到 Native 等价库**：对每个新增 Flutter 依赖，判断 Native 端是否需要对应的库（如 Flutter `dio` → iOS `Moya`/`Alamofire`，Flutter `shared_preferences` → iOS `UserDefaults`）
+3. **检查 Native 项目是否已集成**：
+   - iOS：检查 `Podfile` / `Package.swift` / `*.xcodeproj` 中是否已有对应依赖
+   - Android：检查 `build.gradle` / `build.gradle.kts` 中是否已有对应依赖
+4. **输出依赖检查结果**：
+   - 所有依赖已就绪 → 继续
+   - 存在缺失依赖 → 列出缺失项，**暂停并提示用户**：需要先集成这些依赖再继续执行
+   - 依赖可通过 Native 内置 API 替代（如 `UserDefaults`）→ 标注为"无需额外集成"，继续
+
+> 依赖预检不阻塞"无需额外集成"的情况，仅在真正缺失第三方库时暂停。
+
 ## 改码前必做（显式约定）
 
 - 每个 task 的目标符号（类/方法/文件）改动前，必须先执行：
