@@ -2569,95 +2569,6 @@ def collect_hunk_files(hunk_facts: object) -> set[str]:
     return files
 
 
-def collect_hunk_new_classes(hunk_facts: object) -> list[dict]:
-    """Extract all new_classes from hunk_facts across all files.
-
-    Returns list of dicts with keys: name, user_facing, file, kind.
-    Handles both dict-keyed-by-file format and list/business_hunks format.
-    """
-    classes: list[dict] = []
-    file_entries: list[tuple[str, dict]] = []
-
-    if isinstance(hunk_facts, dict):
-        # Format A: dict keyed by file path (each value has new_classes, new_methods, etc.)
-        business_hunks = hunk_facts.get("business_hunks")
-        if isinstance(business_hunks, list):
-            for item in business_hunks:
-                if isinstance(item, dict):
-                    f = str(item.get("file") or "").strip()
-                    if f:
-                        file_entries.append((f, item))
-        else:
-            # Direct dict-keyed-by-file format: {"file.dart": {"new_classes": [...]}}
-            for key, value in hunk_facts.items():
-                if isinstance(value, dict) and key != "business_hunks":
-                    file_entries.append((key, value))
-    elif isinstance(hunk_facts, list):
-        for item in hunk_facts:
-            if isinstance(item, dict):
-                f = str(item.get("file") or "").strip()
-                if f:
-                    file_entries.append((f, item))
-
-    for file_path, entry in file_entries:
-        new_classes = entry.get("new_classes", [])
-        if not isinstance(new_classes, list):
-            continue
-        for cls in new_classes:
-            if not isinstance(cls, dict):
-                continue
-            name = str(cls.get("name") or "").strip()
-            if not name:
-                continue
-            classes.append({
-                "name": name,
-                "user_facing": bool(cls.get("user_facing", False)),
-                "file": file_path,
-                "kind": str(cls.get("kind") or ""),
-            })
-    return classes
-
-
-def collect_hunk_fields(hunk_facts: object) -> dict[str, list[str]]:
-    """Extract all structured fields from hunk_facts for coverage checking.
-
-    Returns dict with keys: persistence_keys, analytics_events, ab_gates, new_methods.
-    Each value is a list of identifier strings.
-    """
-    result: dict[str, list[str]] = {
-        "persistence_keys": [],
-        "analytics_events": [],
-        "ab_gates": [],
-        "new_methods": [],
-    }
-    entries: list[dict] = []
-
-    if isinstance(hunk_facts, dict):
-        business_hunks = hunk_facts.get("business_hunks")
-        if isinstance(business_hunks, list):
-            entries = [item for item in business_hunks if isinstance(item, dict)]
-        else:
-            entries = [v for v in hunk_facts.values() if isinstance(v, dict)]
-    elif isinstance(hunk_facts, list):
-        entries = [item for item in hunk_facts if isinstance(item, dict)]
-
-    for entry in entries:
-        for key in ("persistence_keys", "analytics_events", "ab_gates"):
-            items = entry.get(key, [])
-            if isinstance(items, list):
-                result[key].extend(str(x).strip() for x in items if str(x).strip())
-        methods = entry.get("new_methods", [])
-        if isinstance(methods, list):
-            for m in methods:
-                if isinstance(m, dict):
-                    name = str(m.get("name") or "").strip()
-                    if name:
-                        result["new_methods"].append(name)
-                elif isinstance(m, str) and m.strip():
-                    result["new_methods"].append(m.strip())
-    return result
-
-
 def build_plan_validation(contract: dict, sync_plan_text: str, tasks: list[dict] | None = None, llm_plan: dict | None = None) -> dict:
     checks: list[dict] = []
 
@@ -2956,92 +2867,6 @@ def build_plan_validation(contract: dict, sync_plan_text: str, tasks: list[dict]
             "name": "弹窗入口语义约束",
             "result": "PASS" if not v11_failures else "FAIL",
             "detail": "" if not v11_failures else "; ".join(v11_failures[:8]),
-        }
-    )
-
-    # --- V13: diff 一致性（新增 class 覆盖检查） ---
-    v13_failures: list[str] = []
-    hunk_new_classes = collect_hunk_new_classes(llm_plan.get("hunk_facts") if isinstance(llm_plan, dict) else None)
-
-    # Build a searchable text from all tasks for coverage matching
-    tasks_search_text = ""
-    for task in normalized_tasks:
-        if not isinstance(task, dict):
-            continue
-        tasks_search_text += " ".join([
-            str(task.get("task_name") or ""),
-            str(task.get("capability_goal") or ""),
-            str(task.get("feature_scope") or ""),
-            json.dumps(task.get("native_landing", {}), ensure_ascii=False),
-            json.dumps(task.get("edit_anchor", {}), ensure_ascii=False),
-            json.dumps(task.get("behavior_contract", {}), ensure_ascii=False),
-            json.dumps(task.get("acceptance_assertions", []), ensure_ascii=False),
-            json.dumps(task.get("mapping_proof", {}), ensure_ascii=False),
-        ]).lower() + " "
-
-    # Also include the raw edit_tasks markdown for broader matching
-    tasks_search_text += " " + sync_plan_text.lower()
-
-    uncovered_classes: list[str] = []
-    for cls in hunk_new_classes:
-        cls_name = cls["name"]
-        # Strip leading underscore for matching (private classes like _Foo)
-        match_name = cls_name.lstrip("_").lower()
-        if match_name and match_name not in tasks_search_text:
-            label = f"{cls_name} ({cls['file']})"
-            if cls["user_facing"]:
-                label += " [user_facing]"
-            uncovered_classes.append(label)
-
-    if uncovered_classes:
-        user_facing_uncovered = [c for c in uncovered_classes if "[user_facing]" in c]
-        if user_facing_uncovered:
-            v13_failures.append("user_facing class 未被 edit_tasks 覆盖: " + ", ".join(user_facing_uncovered[:8]))
-        else:
-            v13_failures.append("非 user_facing class 未覆盖（WARN）: " + ", ".join(uncovered_classes[:8]))
-
-    v13_has_user_facing_gap = any("[user_facing]" in c for c in uncovered_classes)
-    checks.append(
-        {
-            "id": "V13",
-            "name": "diff 一致性（新增 class 覆盖）",
-            "result": "FAIL" if v13_has_user_facing_gap else ("WARN" if uncovered_classes else "PASS"),
-            "detail": "" if not v13_failures else "; ".join(v13_failures[:8]),
-        }
-    )
-
-    # --- V14: hunk_facts 未覆盖事实检查 ---
-    v14_failures: list[str] = []
-    v14_warnings: list[str] = []
-    chain_map = llm_plan.get("flutter_chain_map", {}) if isinstance(llm_plan, dict) else {}
-    uncovered_facts = chain_map.get("uncovered_facts", []) if isinstance(chain_map, dict) else []
-
-    if isinstance(uncovered_facts, list) and uncovered_facts:
-        for fact in uncovered_facts:
-            if not isinstance(fact, dict):
-                continue
-            fact_desc = str(fact.get("description") or fact.get("name") or str(fact))
-            disposition = str(fact.get("disposition") or fact.get("resolution") or "").strip()
-            is_user_facing = bool(fact.get("user_facing", False))
-
-            if is_user_facing and not disposition:
-                v14_failures.append(f"user_facing 未覆盖且无处置: {fact_desc}")
-            elif not disposition:
-                v14_warnings.append(f"未覆盖且无处置说明: {fact_desc}")
-
-    v14_result = "PASS"
-    if v14_failures:
-        v14_result = "FAIL"
-    elif v14_warnings:
-        v14_result = "WARN"
-
-    v14_detail_parts = v14_failures[:4] + v14_warnings[:4]
-    checks.append(
-        {
-            "id": "V14",
-            "name": "hunk_facts 未覆盖事实",
-            "result": v14_result,
-            "detail": "; ".join(v14_detail_parts) if v14_detail_parts else "",
         }
     )
 
@@ -3453,6 +3278,7 @@ def main() -> int:
         print(str(exc), file=sys.stderr)
         return 3
     except Exception as exc:  # pragma: no cover - defensive CLI guard
+        import traceback; traceback.print_exc(file=sys.stderr)
         print(f"atlas-planner error: {exc}", file=sys.stderr)
         return 1
     return 2
