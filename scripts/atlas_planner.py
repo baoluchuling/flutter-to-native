@@ -2525,17 +2525,34 @@ def validate_evidence_lines(repo_root: Path, evidence_lines: list[str]) -> tuple
     return checked > 0, f"matched={checked}"
 
 
-def lifecycle_expected_tokens(lifecycle: str) -> set[str]:
+def lifecycle_expected_tokens(lifecycle: str, custom_tokens: dict[str, list[str]] | None = None) -> set[str]:
+    """Return expected tokens for a lifecycle keyword.
+
+    ``custom_tokens`` is an optional mapping from lifecycle keywords to
+    additional token lists.  When provided by the ``llm_plan`` (under
+    ``lifecycle_tokens``), it allows project-specific vocabularies instead
+    of hardcoded defaults.
+    """
     lower = lifecycle.lower()
     tokens: set[str] = set()
-    if any(k in lower for k in ("tail", "尾", "footer")):
-        tokens.update({"tail", "chaptertailview", "tailview", "footer"})
-    if any(k in lower for k in ("prologue", "引言", "header")):
-        tokens.update({"prologue", "header"})
-    if any(k in lower for k in ("unlock", "解锁")):
-        tokens.update({"unlock", "purchase", "buy"})
-    if any(k in lower for k in ("retain", "挽留", "countdown", "倒计时")):
-        tokens.update({"retain", "charge", "paywall", "countdown"})
+
+    # Check custom tokens first (from llm_plan.lifecycle_tokens)
+    if custom_tokens:
+        for keyword, token_list in custom_tokens.items():
+            if keyword.lower() in lower and isinstance(token_list, list):
+                tokens.update(t.lower() for t in token_list if isinstance(t, str))
+
+    # Generic fallback tokens (platform-agnostic)
+    generic_map: dict[str, list[str]] = {
+        "tail|尾|footer": ["tail", "footer"],
+        "prologue|引言|header": ["prologue", "header"],
+        "unlock|解锁": ["unlock", "purchase", "buy"],
+        "retain|挽留|countdown|倒计时": ["retain", "countdown", "paywall"],
+    }
+    for keys_pattern, fallback_tokens in generic_map.items():
+        if any(k in lower for k in keys_pattern.split("|")):
+            tokens.update(fallback_tokens)
+
     return tokens
 
 
@@ -2732,12 +2749,32 @@ def build_plan_validation(contract: dict, sync_plan_text: str, tasks: list[dict]
         for item in contract.get("native_impact", {}).get("selected_touchpoints", [])
         if item.get("kind") == "feature_model"
     ]
+    # V4: check that model-related tasks provide field_alignment
+    v4_missing: list[str] = []
+    if model_related:
+        for task in normalized_tasks:
+            if not isinstance(task, dict):
+                continue
+            landing = task.get("native_landing", {})
+            if not isinstance(landing, dict):
+                continue
+            landing_kind = str(landing.get("kind") or "").lower()
+            if landing_kind not in {"model", "entity", "dto", "feature_model"}:
+                continue
+            task_name = str(task.get("task_name") or task.get("task_id") or "unnamed")
+            field_alignment = task.get("field_alignment")
+            if not field_alignment:
+                v4_missing.append(task_name)
+
+    v4_result = "PASS"
+    if v4_missing:
+        v4_result = "WARN"
     checks.append(
         {
             "id": "V4",
             "name": "字段对齐表",
-            "result": "PASS" if not model_related else "WARN",
-            "detail": "" if not model_related else "当前版本尚未自动生成逐字段表，涉及 model 触点请人工复核。",
+            "result": v4_result,
+            "detail": "" if not v4_missing else f"以下 model task 缺少 field_alignment: {', '.join(v4_missing[:8])}",
         }
     )
 
@@ -2866,10 +2903,19 @@ def build_plan_validation(contract: dict, sync_plan_text: str, tasks: list[dict]
         entry_kind = str(mapping.get("entry_kind") or "").strip().lower()
         reverse_trace = mapping.get("reverse_trace", [])
         evidence = mapping.get("evidence", [])
+        # Default orchestration keywords cover iOS (Controller/Coordinator/Manager)
+        # and Android (Activity/Fragment/ViewModel) patterns
+        orchestration_keywords = {
+            "controller", "coordinator", "manager",
+            "activity", "fragment", "viewmodel", "view_model",
+            "presenter", "interactor", "handler", "glue",
+        }
+        # Allow llm_plan to extend or override
+        if isinstance(llm_plan, dict) and isinstance(llm_plan.get("orchestration_keywords"), list):
+            orchestration_keywords.update(k.lower() for k in llm_plan["orchestration_keywords"] if isinstance(k, str))
+        path_lower = primary_path.lower()
         has_orchestration_signal = (
-            "controller" in primary_path.lower()
-            or "coordinator" in primary_path.lower()
-            or "manager" in primary_path.lower()
+            any(kw in path_lower for kw in orchestration_keywords)
             or entry_kind == "orchestration_entry"
         )
         if not has_orchestration_signal:
@@ -2905,7 +2951,8 @@ def build_plan_validation(contract: dict, sync_plan_text: str, tasks: list[dict]
         native_chain = mapping.get("native_chain", [])
         evidence_lines = mapping.get("evidence_lines", [])
         chain_text = " ".join(str(x).lower() for x in native_chain) if isinstance(native_chain, list) else ""
-        expected = lifecycle_expected_tokens(lifecycle)
+        custom_lifecycle_tokens = llm_plan.get("lifecycle_tokens") if isinstance(llm_plan, dict) else None
+        expected = lifecycle_expected_tokens(lifecycle, custom_tokens=custom_lifecycle_tokens)
         if expected and not any(token in chain_text for token in expected):
             v10_failures.append(f"{task_name}: lifecycle mismatch ({lifecycle})")
         ok_evidence, _ = validate_evidence_lines(repo_root, evidence_lines if isinstance(evidence_lines, list) else [])
