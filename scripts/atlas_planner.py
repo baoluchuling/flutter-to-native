@@ -303,6 +303,7 @@ def build_parser() -> argparse.ArgumentParser:
     plan.add_argument("--requirement-id", required=True, help="Requirement identifier")
     plan.add_argument("--requirement-name", required=True, help="Requirement name slug")
     plan.add_argument("--force", action="store_true", help="Overwrite existing run artifacts")
+    plan.add_argument("--debug", action="store_true", help="Print full traceback on errors")
 
     status = subparsers.add_parser("status", help="Report the state of a run directory")
     status.add_argument("--run-dir", required=True, help="Path to .ai/t2n/runs/<run-id>")
@@ -2658,7 +2659,7 @@ def collect_hunk_fields(hunk_facts: object) -> dict[str, list[str]]:
     return result
 
 
-def build_plan_validation(contract: dict, sync_plan_text: str, tasks: list[dict] | None = None, llm_plan: dict | None = None) -> dict:
+def build_plan_validation(contract: dict, sync_plan_text: str, tasks: list[dict] | None = None, llm_plan: dict | None = None, run_dir: Path | None = None) -> dict:
     checks: list[dict] = []
 
     unresolved_hits = find_unresolved_items(sync_plan_text)
@@ -2956,6 +2957,30 @@ def build_plan_validation(contract: dict, sync_plan_text: str, tasks: list[dict]
             "name": "弹窗入口语义约束",
             "result": "PASS" if not v11_failures else "FAIL",
             "detail": "" if not v11_failures else "; ".join(v11_failures[:8]),
+        }
+    )
+
+    # --- V12: 跨端差异闭环校验 ---
+    v12_failures: list[str] = []
+    gap_doc_names = ["cross_platform_gap.md", "design_tradeoff.md", "acceptance_alignment.md"]
+    has_cross_platform_gap_task = False
+    for task in normalized_tasks:
+        if not isinstance(task, dict):
+            continue
+        if not task.get("cross_platform_gap"):
+            continue
+        has_cross_platform_gap_task = True
+        task_name = str(task.get("task_name") or task.get("capability_goal") or "unnamed")
+        if run_dir is not None:
+            for doc_name in gap_doc_names:
+                if not (run_dir / doc_name).exists():
+                    v12_failures.append(f"{task_name}: 缺少 {doc_name}")
+    checks.append(
+        {
+            "id": "V12",
+            "name": "跨端差异闭环",
+            "result": "PASS" if not v12_failures else "FAIL",
+            "detail": "" if not v12_failures else "; ".join(v12_failures[:8]),
         }
     )
 
@@ -3401,7 +3426,7 @@ def handle_plan(args: argparse.Namespace) -> int:
     write_text(inputs.run_dir / "risk_report.md", risk_text)
     write_text(inputs.run_dir / EXECUTION_LOG_FILE, render_execution_log_template(tasks))
 
-    validation = build_plan_validation(contract, edit_tasks_text, tasks=tasks, llm_plan=llm_plan)
+    validation = build_plan_validation(contract, edit_tasks_text, tasks=tasks, llm_plan=llm_plan, run_dir=inputs.run_dir)
     if isinstance(llm_plan.get("plan_validation"), dict):
         pv = llm_plan.get("plan_validation")
         checks = pv.get("checks", [])
@@ -3453,6 +3478,8 @@ def main() -> int:
         print(str(exc), file=sys.stderr)
         return 3
     except Exception as exc:  # pragma: no cover - defensive CLI guard
+        if getattr(args, "debug", False):
+            import traceback; traceback.print_exc(file=sys.stderr)
         print(f"atlas-planner error: {exc}", file=sys.stderr)
         return 1
     return 2

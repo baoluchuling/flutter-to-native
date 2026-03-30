@@ -1,4 +1,4 @@
-# Step 4. plan_validation（自动校验闸门）
+# Step 4. plan_validation（规划校验）
 
 - 校验未决项、触发方式、行为契约完整性、落点可执行性、风险标注
 - 校验映射证明（`V7`）：无 `mapping_proof` 或 `status!=mapped` 直接 `FAIL`
