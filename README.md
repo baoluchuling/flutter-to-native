@@ -56,6 +56,47 @@ Step 0-2.3 共享 Flutter 分析，Step 2.4 起按平台分叉。双端同步时
     └── test_atlas_intent_bridge.py
 ```
 
+## 核心能力
+
+整个流程围绕三个阶段展开：**分析 → 规划 → 执行**。以下能力对各阶段的效果起决定性作用。
+
+### 分析阶段（Step 1-2）— 搞清楚改了什么、要同步什么
+
+| 能力 | 作用 | 重要度 |
+|------|------|--------|
+| git diff 解析 | 变更盘点的唯一输入源 | 必需 |
+| hunk_facts 结构化提取 | 从 diff 中提取新增 class / 字段 / 埋点 / AB 门控 | 必需 |
+| Figma 截图拉取 | UI 变更的验收基准 | UI 时必需 |
+| understand-anything 知识图谱 | Native 仓库的架构理解，支撑链路匹配 | 必需 |
+
+### 规划阶段（Step 3-5）— 确定怎么改 Native
+
+| 能力 | 作用 | 重要度 |
+|------|------|--------|
+| 四步自动映射 | 能力切片 → 链路抽取 → Native 匹配 → 反证淘汰，决定改哪里 | **最核心** |
+| atlas_planner.py | 生成 edit_tasks + 执行 V7-V14 校验 | 必需 |
+| Platform Profile | 告诉映射引擎什么是编排入口、什么是视图层 | 必需 |
+| flutter_chain_map | Flutter 链路到 Native 链路的映射证据 | 必需 |
+
+### 执行阶段（Step 6-8）— 改代码并验证
+
+| 能力 | 作用 | 重要度 |
+|------|------|--------|
+| understand-explain | 改码前查调用链，避免盲改 | 必需 |
+| superpowers 任务调度 | 拆分 task 给 agent 并行执行 | 高 |
+| 编译验证 | 改完立刻编译，快速反馈 | 必需 |
+| atlas_verify.py | diff 覆盖反向检查，防遗漏 | 必需 |
+
+### Top 5 关键能力
+
+1. **四步自动映射**（Step 2）— 没有它就是人工猜落点
+2. **V7-V14 校验闸门**（Step 4）— 没有它质量无保障
+3. **understand-anything 知识图谱** — 没有它 Native 链路匹配无从做起
+4. **hunk_facts 结构化提取** — 没有它 verify 的反向检查无法执行
+5. **understand-explain 调用链查询** — 没有它改码就是盲人摸象
+
+> 前两个决定"改得对不对"，后三个决定"改得全不全"。
+
 ## 校验闸门（Plan Validation）
 
 | ID | 检查项 | 级别 |
