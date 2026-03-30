@@ -2,13 +2,14 @@
 
 > **严禁跳过 verify**：verify 是防止遗漏功能进入交付的最后一道防线。`verify_report.md` 和 `verify_result.json` 必须存在，否则视为流程未完成，不得进入 finalize。
 
-> 命令须在 iOS 仓库根目录（`<ios-project-root>`）下执行，`scripts/atlas_verify.py` 相对于该根目录。
+> 命令须在 Native 仓库根目录下执行，`scripts/atlas_verify.py` 相对于该根目录。
 
 ```bash
 python3 scripts/atlas_verify.py verify \
-  --run-dir <run-dir> \
-  [--repo-root <ios-project-root>] \
-  [--swift-parse-check] \
+  --run-dir <run-dir>/<platform> \
+  [--repo-root <native-project-root>] \
+  [--swift-parse-check]    # iOS
+  [--kotlin-parse-check]   # Android
   [--force]
 ```
 
@@ -21,7 +22,7 @@ python3 scripts/atlas_verify.py verify \
   - `cross_platform_gap.md` 中的差异点是否被代码或配置实现
   - `design_tradeoff.md` 的取舍是否与最终实现一致
   - `acceptance_alignment.md` 的对齐项是否全部有验收结论（PASS/WARN/FAIL）
-- **diff 覆盖反向检查（强制）**：从 `hunk_facts.json` 出发，逐字段核查 Native 实现是否覆盖：
+- **diff 覆盖反向检查（强制）**：从 `flutter/hunk_facts.json` 出发，逐字段核查 Native 实现是否覆盖：
   - `new_classes`：每个 `user_facing: true` 的 class 是否有对应 Native 文件或类
   - `persistence_keys`：每个持久化 key 格式是否在 Native 代码中有等价实现（key 名、变量结构）
   - `analytics_events`：每个埋点事件是否在 Native 中有对应调用（允许平台差异但必须显式标注）
@@ -54,13 +55,13 @@ verify 结果为 `WARN` 时，**可进入 finalize**，但：
 verify 通过后，必须运行基准测试：
 
 ```bash
-python3 .ai/t2n/benchmark/run_benchmark.py --case <case-id> --repo-root <ios-root>
+python3 .ai/t2n/benchmark/run_benchmark.py --case <case-id> --repo-root <native-root>
 # 注：<case-id> 是 benchmark/cases/ 目录下的 case 名（如 short-opz-001），不是带时间戳的 run-id
 ```
 
 - Layer 1（hunk_facts）FAIL：回到 Step 2 补充提取，重新走 plan → validate → execute 循环
-- Layer 4（Swift 代码扫描）FAIL：Native 代码中关键词未落地，视同 verify FAIL，必须修复后重新 verify
+- Layer 4（Native 代码扫描）FAIL：Native 代码中关键词未落地，视同 verify FAIL，必须修复后重新 verify
 - Layer 2/3 FAIL：chain_map 或 edit_tasks 覆盖不足，在 `verify_report.md` 附录中标注 WARN，列入 finalize_report 遗留风险
 - 基准测试结果追加到 `verify_report.md` 附录；**Layer 4 FAIL 导致 verify_result 降级为 FAIL**
 
-产物：`verify_report.md`、`verify_result.json`
+产物：`<platform>/verify_report.md`、`<platform>/verify_result.json`

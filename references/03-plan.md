@@ -1,13 +1,15 @@
 # Step 3. plan（能力任务规划）
 
-先由 CLI 的 LLM 生成 `llm_plan.json`（建议放到 `<run-dir>/llm_plan.json`），再执行 planner 落盘与校验。
+> 双端同步时，每个平台各执行一次。
 
-> 命令须在 iOS 仓库根目录（`<ios-project-root>`）下执行，`scripts/atlas_planner.py` 相对于该根目录。
+先由 CLI 的 LLM 生成 `llm_plan.json`（建议放到 `<run-dir>/<platform>/llm_plan.json`），再执行 planner 落盘与校验。
+
+> 命令须在 Native 仓库根目录下执行，`scripts/atlas_planner.py` 相对于该根目录。
 
 ```bash
 python3 scripts/atlas_planner.py plan \
-  --repo-root <ios-project-root> \
-  --run-dir <ios-project-root>/.ai/t2n/runs/<run-id> \
+  --repo-root <native-project-root> \
+  --run-dir <run-dir>/<platform> \
   --requirement-id <REQ-ID> \
   --requirement-name <REQ-NAME> \
   [--prd-path <prd.md>] \
@@ -27,6 +29,7 @@ python3 scripts/atlas_planner.py plan \
 并且必须包含 `meta`（硬约束）：
 - `meta.analysis_mode = "live_llm"`
 - `meta.generated_by`（禁止 `demo/example/sample/mock`）
+- `meta.platform`（必须为 `ios` 或 `android`）
 - `meta.evidence.pr_diff_path` 与本次 `--pr-diff-path` 一致
 - `meta.evidence.pr_diff_sha256` 与本次 diff 文件 sha256 一致（计算方式：`sha256sum <flutter.diff>` 或 `python3 -c "import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" <flutter.diff>`）
 
@@ -40,7 +43,7 @@ python3 scripts/atlas_planner.py plan \
 - 功能域（`feature_scope`）
 - 触发生命周期（`trigger_lifecycle`）
 - 行为契约（状态、交互、副作用、异常）
-- 原生落点（UI/编排/数据/路由，可多对多）
+- 原生落点（UI/编排/数据/路由，可多对多；使用 platform profile 定义的架构词汇）
 - 触点子项（UI/编排/数据/路由）
 - 编辑锚点（文件/类/方法，候选实现位置）
 - 映射证明（`mapping_proof`）：
@@ -55,7 +58,7 @@ python3 scripts/atlas_planner.py plan \
   - `evidence`：映射依据（路径/符号/调用关系）
 - 验收断言（完成标准）
 
-## 产物
+## 产物（存入 `<platform>/`）
 
 - `intent.md`
 - `edit_tasks.md`
