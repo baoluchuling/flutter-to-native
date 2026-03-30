@@ -2778,18 +2778,42 @@ def build_plan_validation(contract: dict, sync_plan_text: str, tasks: list[dict]
         }
     )
 
-    missing_design_source = [
-        item.get("path", "unknown")
-        for item in contract.get("native_impact", {}).get("selected_touchpoints", [])
-        if item.get("ui_role") in {"primary_screen", "auxiliary_dialog", "auxiliary_overlay", "component_view"}
-        and not item.get("source_screens")
-    ]
+    v5_failures: list[str] = []
+    v5_warnings: list[str] = []
+    figma_pages = []
+    if isinstance(llm_plan, dict):
+        figma_pages = llm_plan.get("figma", {}).get("pages", []) if isinstance(llm_plan.get("figma"), dict) else []
+    for item in contract.get("native_impact", {}).get("selected_touchpoints", []):
+        ui_role = item.get("ui_role")
+        if ui_role not in {"primary_screen", "auxiliary_dialog", "auxiliary_overlay", "component_view"}:
+            continue
+        path = item.get("path", "unknown")
+        if not item.get("source_screens"):
+            v5_failures.append(f"{path}: 缺少 source_screens")
+    # Validate Figma link format and screenshot existence
+    figma_link_re = re.compile(r"https://www\.figma\.com/design/[A-Za-z0-9]+/.+\?node-id=")
+    for page in figma_pages:
+        if not isinstance(page, dict):
+            continue
+        page_name = str(page.get("name") or "unnamed")
+        for variant in page.get("variants", []):
+            if not isinstance(variant, dict):
+                continue
+            link = str(variant.get("link") or "")
+            screenshot = str(variant.get("screenshot") or "")
+            label = str(variant.get("label") or "")
+            if link and not figma_link_re.match(link):
+                v5_warnings.append(f"{page_name}/{label}: Figma 链接格式异常")
+            if screenshot and run_dir is not None and not (run_dir / screenshot).exists():
+                v5_warnings.append(f"{page_name}/{label}: 截图文件不存在 ({screenshot})")
+    v5_result = "FAIL" if v5_failures else ("WARN" if v5_warnings else "PASS")
+    v5_detail = "; ".join((v5_failures + v5_warnings)[:8])
     checks.append(
         {
             "id": "V5",
             "name": "UI 设计参考",
-            "result": "PASS" if not missing_design_source else "FAIL",
-            "detail": "" if not missing_design_source else "UI 触点缺少设计输入（需 Figma 链接+截图）: " + ", ".join(missing_design_source[:8]),
+            "result": v5_result,
+            "detail": v5_detail,
         }
     )
 

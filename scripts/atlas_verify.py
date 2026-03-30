@@ -72,10 +72,13 @@ def write_text(path: Path, content: str) -> None:
 
 
 def read_text(path: Path) -> str:
-    try:
-        return path.read_text(encoding="utf-8")
-    except UnicodeDecodeError:
-        return path.read_text(encoding="latin-1")
+    for encoding in ("utf-8", "gbk", "shift_jis", "euc-kr", "latin-1"):
+        try:
+            return path.read_text(encoding=encoding)
+        except (UnicodeDecodeError, LookupError):
+            continue
+    # latin-1 never raises UnicodeDecodeError, so this is a fallback safety net
+    return path.read_text(encoding="latin-1", errors="replace")
 
 
 def load_edit_tasks(run_dir: Path) -> list[dict]:
