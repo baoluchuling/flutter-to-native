@@ -2542,12 +2542,13 @@ def lifecycle_expected_tokens(lifecycle: str, custom_tokens: dict[str, list[str]
             if keyword.lower() in lower and isinstance(token_list, list):
                 tokens.update(t.lower() for t in token_list if isinstance(t, str))
 
-    # Generic fallback tokens (platform-agnostic)
+    # Default tokens: generic terms + common reading-app vocabulary.
+    # Projects can override/extend via llm_plan.lifecycle_tokens.
     generic_map: dict[str, list[str]] = {
-        "tail|尾|footer": ["tail", "footer"],
+        "tail|尾|footer": ["tail", "tailview", "chaptertailview", "footer"],
         "prologue|引言|header": ["prologue", "header"],
         "unlock|解锁": ["unlock", "purchase", "buy"],
-        "retain|挽留|countdown|倒计时": ["retain", "countdown", "paywall"],
+        "retain|挽留|countdown|倒计时": ["retain", "charge", "paywall", "countdown"],
     }
     for keys_pattern, fallback_tokens in generic_map.items():
         if any(k in lower for k in keys_pattern.split("|")):
