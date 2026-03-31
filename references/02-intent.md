@@ -101,7 +101,7 @@
 
 **注意**：查询关键词必须使用 Native 侧的类名/方法名/功能词，不要用 Flutter 侧的叫法，否则知识图谱无法匹配到节点
 
-每次查询结果必须追加记录到 `<platform>/understand_chat_log.md`（见 [understand_chat_log 格式](./09-understand-chat-log.md)）
+每次查询结果必须追加记录到 `<platform>/understand_chat_log.md`（见 [understand_chat_log 格式](./10-understand-chat-log.md)）
 
 产物：`<platform>/native_chain_candidates.json`
 

@@ -1,4 +1,4 @@
-# Step 8. finalize（交付）
+# Step 9. finalize（交付）
 
 > 双端同步时，所有平台都通过 verify 后，合并输出一份 finalize_report。
 

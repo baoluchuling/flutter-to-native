@@ -33,6 +33,7 @@ class VerifyInputs:
     repo_root: Path | None
     force: bool
     swift_parse_check: bool
+    kotlin_parse_check: bool
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -44,6 +45,7 @@ def build_parser() -> argparse.ArgumentParser:
     verify_parser.add_argument("--repo-root", help="Optional override for target repository root")
     verify_parser.add_argument("--force", action="store_true", help="Overwrite existing verify artifacts")
     verify_parser.add_argument("--swift-parse-check", action="store_true", help="Run optional swift -parse checks")
+    verify_parser.add_argument("--kotlin-parse-check", action="store_true", help="Run optional Kotlin compile checks")
 
     status_parser = subparsers.add_parser("status", help="Report verify readiness for a run directory")
     status_parser.add_argument("--run-dir", required=True, help="Path to .ai/t2n/runs/<run-id>")
@@ -56,6 +58,7 @@ def build_inputs(args: argparse.Namespace) -> VerifyInputs:
         repo_root=Path(args.repo_root).expanduser().resolve() if getattr(args, "repo_root", None) else None,
         force=bool(getattr(args, "force", False)),
         swift_parse_check=bool(getattr(args, "swift_parse_check", False)),
+        kotlin_parse_check=bool(getattr(args, "kotlin_parse_check", False)),
     )
 
 
@@ -279,7 +282,11 @@ def run_swift_parse(repo_root: Path, file_paths: list[str]) -> list[dict]:
             results.append({"path": rel_path, "status": "fail", "reason": "file missing"})
             continue
         cmd = ["xcrun", "swiftc", "-parse", str(target)] if compiler == "xcrun" else ["swiftc", "-parse", str(target)]
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        except subprocess.TimeoutExpired:
+            results.append({"path": rel_path, "status": "fail", "reason": "swift parse timed out (30s)"})
+            continue
         if proc.returncode == 0:
             results.append({"path": rel_path, "status": "pass", "reason": ""})
         else:
@@ -287,6 +294,41 @@ def run_swift_parse(repo_root: Path, file_paths: list[str]) -> list[dict]:
             results.append({"path": rel_path, "status": "fail", "reason": message[0][:220] if message else "swift parse failed"})
     if not results:
         return [{"path": "(none)", "status": "skip", "reason": "no swift file in execution log"}]
+    return results
+
+
+def find_kotlinc() -> str | None:
+    if shutil.which("kotlinc"):
+        return "kotlinc"
+    return None
+
+
+def run_kotlin_parse(repo_root: Path, file_paths: list[str]) -> list[dict]:
+    compiler = find_kotlinc()
+    if not compiler:
+        return [{"path": "(all)", "status": "skip", "reason": "kotlinc not found"}]
+
+    results: list[dict] = []
+    for rel_path in sorted(set(file_paths)):
+        if not rel_path.endswith(".kt"):
+            continue
+        target = repo_root / rel_path
+        if not target.exists():
+            results.append({"path": rel_path, "status": "fail", "reason": "file missing"})
+            continue
+        cmd = ["kotlinc", "-script", "-no-reflect", "-no-stdlib", str(target)]
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        except subprocess.TimeoutExpired:
+            results.append({"path": rel_path, "status": "fail", "reason": "kotlin parse timed out (60s)"})
+            continue
+        if proc.returncode == 0:
+            results.append({"path": rel_path, "status": "pass", "reason": ""})
+        else:
+            message = (proc.stderr or proc.stdout or "kotlin parse failed").strip().splitlines()
+            results.append({"path": rel_path, "status": "fail", "reason": message[0][:220] if message else "kotlin parse failed"})
+    if not results:
+        return [{"path": "(none)", "status": "skip", "reason": "no .kt file in execution log"}]
     return results
 
 
@@ -325,6 +367,10 @@ def build_verify_result(inputs: VerifyInputs) -> dict:
     if inputs.swift_parse_check and repo_root:
         swift_results = run_swift_parse(repo_root, sorted(touched_files))
 
+    kotlin_results: list[dict] = []
+    if inputs.kotlin_parse_check and repo_root:
+        kotlin_results = run_kotlin_parse(repo_root, sorted(touched_files))
+
     # --- diff 覆盖矩阵: hunk_facts → edit_tasks cross-check ---
     coverage_matrix: list[dict] = []
     hunk_facts = load_hunk_facts(inputs.run_dir)
@@ -334,6 +380,7 @@ def build_verify_result(inputs: VerifyInputs) -> dict:
     has_fail = (
         any(item["status"] == "fail" for item in task_results)
         or any(item["status"] == "fail" for item in swift_results)
+        or any(item["status"] == "fail" for item in kotlin_results)
         or any(item["status"] == "FAIL" for item in coverage_matrix)
     )
     has_pending = any(item["status"] in {"missing", "pending"} for item in task_results)
@@ -357,6 +404,7 @@ def build_verify_result(inputs: VerifyInputs) -> dict:
         "tasks_total": len(tasks),
         "task_results": task_results,
         "swift_parse_results": swift_results,
+        "kotlin_parse_results": kotlin_results,
         "coverage_matrix": coverage_matrix,
         "summary": [
             f"tasks={len(tasks)}",
@@ -392,6 +440,13 @@ def render_report(result: dict) -> str:
         lines.append("- not enabled")
     else:
         for item in result["swift_parse_results"]:
+            lines.append(f"- `{item['path']}`: `{item['status']}` | {item.get('reason','')}")
+
+    lines.extend(["", "## Kotlin Parse", ""])
+    if not result.get("kotlin_parse_results"):
+        lines.append("- not enabled")
+    else:
+        for item in result["kotlin_parse_results"]:
             lines.append(f"- `{item['path']}`: `{item['status']}` | {item.get('reason','')}")
 
     # --- diff 覆盖矩阵 ---

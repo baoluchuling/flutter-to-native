@@ -5,6 +5,8 @@
 先由 CLI 的 LLM 生成 `llm_plan.json`（建议放到 `<run-dir>/<platform>/llm_plan.json`），再执行 planner 落盘与校验。
 
 > 命令须在 Native 仓库根目录下执行，`scripts/atlas_planner.py` 相对于该根目录。
+>
+> Planner 内部通过 `atlas_intent_bridge.py` 加载 profile-v2 数据并转换为 touchpoints，无需单独调用。
 
 ```bash
 python3 scripts/atlas_planner.py plan \

@@ -8,17 +8,20 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-GLOBAL_RISK_TOKENS = (
-    "appdelegate",
-    "scenedelegate",
-    "router",
-    "routing",
-    "route",
-    "coordinator",
-    "deeplink",
-    "bootstrap",
-    "assembly",
-)
+try:
+    from atlas_planner import GLOBAL_RISK_TOKENS
+except ImportError:
+    GLOBAL_RISK_TOKENS = (
+        "appdelegate",
+        "scenedelegate",
+        "router",
+        "routing",
+        "route",
+        "coordinator",
+        "deeplink",
+        "bootstrap",
+        "assembly",
+    )
 
 
 @dataclass
@@ -32,11 +35,6 @@ class FeatureRecord:
 @dataclass
 class HostMappingRecord:
     feature_id: str
-    page_hosts: list[str]
-    action_hosts: list[str]
-    state_hosts: list[str]
-    data_hosts: list[str]
-    side_effect_hosts: list[str]
     code_entities: list[str]
 
 
@@ -99,11 +97,6 @@ def load_profile_v2(profile_v2_dir: Path) -> ProfileV2:
             continue
         host_mappings[feature_id] = HostMappingRecord(
             feature_id=feature_id,
-            page_hosts=[str(value) for value in item.get("page_hosts", []) if str(value).strip()],
-            action_hosts=[str(value) for value in item.get("action_hosts", []) if str(value).strip()],
-            state_hosts=[str(value) for value in item.get("state_hosts", []) if str(value).strip()],
-            data_hosts=[str(value) for value in item.get("data_hosts", []) if str(value).strip()],
-            side_effect_hosts=[str(value) for value in item.get("side_effect_hosts", []) if str(value).strip()],
             code_entities=[str(value) for value in item.get("code_entities", []) if str(value).strip()],
         )
     return ProfileV2(features=features, host_mappings=host_mappings)

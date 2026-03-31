@@ -369,11 +369,6 @@ def gather_path_files(path: Path | None, limit: int = 20) -> list[str]:
     return [str(item) for item in files[:limit]]
 
 
-def collect_lines(path: Path | None, max_lines: int = 20) -> list[str]:
-    text = read_text_safe(path)
-    if not text:
-        return []
-    return [line.strip() for line in text.splitlines()[:max_lines] if line.strip()]
 
 
 def parse_prd_evidence(path: Path | None) -> dict:
@@ -533,16 +528,14 @@ def unique_preserve(items: list[str]) -> list[str]:
     return result
 
 
-def gather_flutter_feature_files(inputs: PlanningInputs, limit: int = 40) -> list[Path]:
-    if inputs.flutter_path is None:
+def gather_flutter_files(root: Path | None, limit: int = 40, suffixes: set[str] | None = None) -> list[Path]:
+    if root is None:
         return []
-    if inputs.flutter_path.is_file():
-        return [inputs.flutter_path]
-    preferred_suffixes = {".dart", ".yaml", ".yml", ".json"}
+    if root.is_file():
+        return [root]
     files = sorted(
-        path
-        for path in inputs.flutter_path.rglob("*")
-        if path.is_file() and (path.suffix in preferred_suffixes or not path.suffix)
+        path for path in root.rglob("*")
+        if path.is_file() and (suffixes is None or path.suffix in suffixes or not path.suffix)
     )
     return files[:limit]
 
@@ -738,7 +731,7 @@ def extract_api_signals(text: str) -> list[str]:
 
 
 def extract_flutter_semantics(inputs: PlanningInputs) -> dict:
-    files = gather_flutter_feature_files(inputs)
+    files = gather_flutter_files(inputs.flutter_path, suffixes={".dart", ".yaml", ".yml", ".json"})
     screens: list[str] = []
     state_holders: list[str] = []
     api_calls: list[str] = []
@@ -991,7 +984,7 @@ def build_evidence(inputs: PlanningInputs) -> dict:
         "flutter_digest": flutter_digest,
         "flutter": {
             "paths": digest_feature_paths,
-            "key_files": flutter_digest.get("evidence_files") or flutter_semantics["key_files"] or gather_flutter_key_files(inputs),
+            "key_files": flutter_digest.get("evidence_files") or flutter_semantics["key_files"] or [str(p) for p in gather_flutter_files(inputs.flutter_path, limit=12)],
             "representative_screens": representative_screens,
             "screens": digest_screens if "representative_screens" in flutter_digest else flutter_semantics["screens"],
             "state_holders": digest_field(flutter_digest, "state_holders", flutter_semantics["state_holders"]),
@@ -1275,15 +1268,6 @@ def build_change_basis(inputs: PlanningInputs) -> list[str]:
     return basis
 
 
-def gather_flutter_key_files(inputs: PlanningInputs, limit: int = 12) -> list[str]:
-    if inputs.flutter_path is None:
-        return []
-    if inputs.flutter_path.is_file():
-        return [str(inputs.flutter_path)]
-    files = sorted(p for p in inputs.flutter_path.rglob("*") if p.is_file())
-    return [str(path) for path in files[:limit]]
-
-
 def split_key_files(inputs: PlanningInputs, evidence: dict) -> tuple[list[str], list[str]]:
     key_files = evidence["flutter"]["key_files"]
     if not key_files:
@@ -1314,13 +1298,6 @@ def infer_native_kind(rel_path: str) -> str:
     return "other"
 
 
-def normalize_touchpoint_kind(kind: str | None, path: str) -> str:
-    if kind == "feature_flow":
-        return "feature_logic"
-    if kind and kind != "other":
-        return kind
-    inferred = infer_native_kind(path)
-    return inferred if inferred != "other" else (kind or "other")
 
 
 def derive_risk(rel_path: str) -> tuple[str, bool]:
@@ -1441,12 +1418,6 @@ def locate_native_candidates(repo_root: Path, keyword_bundle: dict, limit: int =
     return candidates[:limit]
 
 
-def path_anchor_tokens(path: str) -> set[str]:
-    return {
-        token
-        for token in tokenize_text(path)
-        if token not in STOPWORDS and token not in ANCHOR_PATH_STOPWORDS and len(token) >= 4
-    }
 
 def role_to_screen_names(screen_groups: dict[str, list[dict]]) -> dict[str, list[str]]:
     return {
@@ -1852,170 +1823,8 @@ def build_contract(inputs: PlanningInputs) -> dict:
     }
 
 
-def yaml_scalar(value) -> str:
-    if value is None:
-        return "null"
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    if isinstance(value, (int, float)):
-        return str(value)
-    text = str(value)
-    if text == "" or any(ch in text for ch in [":", "#", "[", "]", "{", "}", ",", "\n"]):
-        escaped = text.replace('"', '\\"')
-        return f'"{escaped}"'
-    return text
-
-
-def dump_yaml(value, indent: int = 0) -> list[str]:
-    prefix = " " * indent
-    if isinstance(value, dict):
-        lines: list[str] = []
-        for key, item in value.items():
-            if isinstance(item, (dict, list)):
-                lines.append(f"{prefix}{key}:")
-                lines.extend(dump_yaml(item, indent + 2))
-            else:
-                lines.append(f"{prefix}{key}: {yaml_scalar(item)}")
-        return lines
-    if isinstance(value, list):
-        lines = []
-        if not value:
-            return [f"{prefix}[]"]
-        for item in value:
-            if isinstance(item, (dict, list)):
-                lines.append(f"{prefix}-")
-                lines.extend(dump_yaml(item, indent + 2))
-            else:
-                lines.append(f"{prefix}- {yaml_scalar(item)}")
-        return lines
-    return [f"{prefix}{yaml_scalar(value)}"]
-
-
 def write_text(path: Path, content: str) -> None:
     path.write_text(content.rstrip() + "\n", encoding="utf-8")
-
-
-def build_feature_intent_spec(contract: dict) -> dict:
-    requirement = contract["requirement"]
-    behavior = contract["behavior"]
-    flutter = contract["flutter_evidence"]
-    source = contract["source"]
-    representative = flutter.get("representative_screens", [])
-    states = [item["name"] for item in behavior.get("states", []) if isinstance(item, dict) and item.get("name")]
-    intents: list[dict] = []
-
-    for index, item in enumerate(representative, start=1):
-        intents.append(
-            {
-                "intent_id": f"ui_{index:02d}",
-                "intent_type": "ui_flow",
-                "screen_name": item.get("name"),
-                "screen_path": item.get("path"),
-                "screen_role": item.get("role", "primary_screen"),
-                "interactions": behavior.get("interactions", [])[:6],
-                "states": states[:6],
-                "acceptance_points": behavior.get("acceptance_points", [])[:4],
-            }
-        )
-
-    if flutter.get("api_calls"):
-        intents.append(
-            {
-                "intent_id": f"data_{len(intents) + 1:02d}",
-                "intent_type": "data_flow",
-                "api_calls": flutter.get("api_calls", []),
-                "models": flutter.get("models", []),
-                "states": states[:6],
-                "acceptance_points": behavior.get("acceptance_points", [])[:3],
-            }
-        )
-
-    if not intents:
-        intents.append(
-            {
-                "intent_id": "ui_01",
-                "intent_type": "ui_flow",
-                "screen_name": requirement["name"],
-                "interactions": behavior.get("interactions", [])[:6],
-                "states": states[:6],
-                "acceptance_points": behavior.get("acceptance_points", [])[:4],
-            }
-        )
-
-    return {
-        "requirement": {
-            "id": requirement["id"],
-            "name": requirement["name"],
-            "summary": requirement["summary"],
-        },
-        "intent_scope": {
-            "primary_features": flutter.get("primary_features", []),
-            "supporting_features": flutter.get("supporting_features", []),
-            "flutter_paths": source.get("flutter_paths", []),
-            "change_basis": source.get("change_basis", []),
-            "change_ref": source.get("change_ref"),
-        },
-        "intent_units": intents,
-        "behavior_contract": {
-            "user_flows": behavior.get("user_flows", []),
-            "acceptance_points": behavior.get("acceptance_points", []),
-            "strings": behavior.get("strings", [])[:20],
-            "assets": behavior.get("assets", [])[:20],
-        },
-    }
-
-
-def planned_action_for_path(path: str, contract: dict) -> str:
-    patch_plan = contract.get("patch_plan", {})
-    if path in patch_plan.get("create", []):
-        return "create_file"
-    if path in patch_plan.get("update", []):
-        return "edit_existing"
-    if path in patch_plan.get("manual_candidates", []):
-        return "manual_review"
-    return "review_candidate"
-
-
-def build_native_operation_plan(contract: dict) -> dict:
-    requirement = contract["requirement"]
-    behavior = contract["behavior"]
-    selected = contract.get("native_impact", {}).get("selected_touchpoints", [])
-    operations: list[dict] = []
-    for index, item in enumerate(selected, start=1):
-        operations.append(
-            {
-                "operation_id": f"op_{index:02d}",
-                "action": planned_action_for_path(item["path"], contract),
-                "target_path": item["path"],
-                "target_kind": item.get("kind", "other"),
-                "ui_role": item.get("ui_role", "non_ui"),
-                "confidence": item.get("confidence", "low"),
-                "risk": item.get("risk", "low"),
-                "source_screens": item.get("source_screens", []),
-                "intent_links": behavior.get("user_flows", [])[:4],
-                "reason": item.get("reason", ""),
-            }
-        )
-
-    manual_candidates = contract.get("patch_plan", {}).get("manual_candidates", [])
-    return {
-        "requirement": {
-            "id": requirement["id"],
-            "name": requirement["name"],
-        },
-        "operation_policy": {
-            "execution_mode": "plan_then_confirm_then_apply",
-            "auto_apply_confidence": "high",
-            "manual_when": [
-                "action=manual_review",
-                "risk=high",
-                "confidence=low",
-                "ui_role=registration_point",
-            ],
-        },
-        "operations": operations,
-        "manual_candidates": manual_candidates,
-    }
 
 
 def extract_note_value(contract: dict, prefix: str, fallback: str) -> str:
@@ -2040,227 +1849,6 @@ def manual_reason_map(contract: dict) -> dict[str, dict]:
     return merged
 
 
-def render_sync_plan(contract: dict) -> str:
-    req = contract["requirement"]
-    behavior = contract["behavior"]
-    source = contract["source"]
-    native_impact = contract["native_impact"]
-    patch_plan = contract["patch_plan"]
-    scope_confidence = extract_note_value(contract, "Initial V1 planner output with scope confidence=", "medium")
-    native_impact_confidence = extract_note_value(contract, "Native impact confidence=", "medium").split(";", 1)[0]
-    overall_risk = extract_note_value(contract, "Native impact confidence=", "medium").split("overall risk=")[-1]
-    manual_lookup = manual_reason_map(contract)
-    lines = [
-        f"# Sync Plan: {req['name']}",
-        "",
-        "## 1. 需求概览",
-        "",
-        f"- Requirement ID: `{req['id']}`",
-        f"- Requirement Name: `{req['name']}`",
-        f"- Summary: {req['summary']}",
-        f"- Scope Confidence: `{scope_confidence}`",
-        f"- Native Impact Confidence: `{native_impact_confidence}`",
-        "",
-        "### 关键用户流程",
-        "",
-    ]
-    lines.extend(f"- {item}" for item in behavior["user_flows"])
-    lines.extend(
-        [
-            "",
-            "### 关键验收点",
-            "",
-        ]
-    )
-    lines.extend(f"- {item}" for item in behavior["acceptance_points"])
-    lines.extend(
-        [
-            "",
-            "## 2. Flutter 证据概览",
-            "",
-            "### 主要代码范围",
-            "",
-        ]
-    )
-    flutter_paths = source.get("flutter_paths") or contract["flutter_evidence"]["key_files"]
-    if flutter_paths:
-        lines.extend(f"- {item}" for item in flutter_paths[:10])
-    else:
-        lines.append("- No Flutter path provided")
-    primary_features = contract["flutter_evidence"].get("primary_features", [])
-    supporting_features = contract["flutter_evidence"].get("supporting_features", [])
-    if primary_features:
-        lines.extend(["", "### 需求主范围", ""])
-        lines.append(f"- Primary Features: `{', '.join(primary_features)}`")
-    if supporting_features:
-        lines.extend(["", "### 配套范围", ""])
-        lines.append(f"- Supporting Features: `{', '.join(supporting_features)}`")
-    lines.extend(
-        [
-            "",
-            "### PR Diff 摘要",
-            "",
-            f"- Change basis: {', '.join(source['change_basis'])}",
-        ]
-    )
-    if source.get("pr_diff_path"):
-        lines.append(f"- Diff artifact: {source['pr_diff_path']}")
-    lines.extend(["", "### 提取到的页面与状态管理", ""])
-    representative_screens = contract["flutter_evidence"].get("representative_screens", [])
-    if representative_screens:
-        lines.extend(
-            f"- Screen: `{item['name']}` | role=`{item.get('role', 'primary_screen')}`"
-            for item in representative_screens
-        )
-    elif contract["flutter_evidence"]["screens"]:
-        lines.extend(f"- Screen: `{item}`" for item in contract["flutter_evidence"]["screens"])
-    if contract["flutter_evidence"]["state_holders"]:
-        lines.extend(f"- State Holder: `{item}`" for item in contract["flutter_evidence"]["state_holders"])
-    if not contract["flutter_evidence"]["screens"] and not contract["flutter_evidence"]["state_holders"]:
-        lines.append("- No explicit screen or state-holder evidence detected")
-    lines.extend(["", "### API 与模型证据", ""])
-    if contract["flutter_evidence"]["api_calls"]:
-        lines.extend(f"- API: `{item}`" for item in contract["flutter_evidence"]["api_calls"])
-    if contract["flutter_evidence"].get("models"):
-        lines.extend(f"- Model: `{item}`" for item in contract["flutter_evidence"]["models"])
-    if not contract["flutter_evidence"]["api_calls"] and not contract["flutter_evidence"].get("models"):
-        lines.append("- No explicit API or model evidence detected")
-    lines.extend(["", "### 测试证据", ""])
-    tests = contract["flutter_evidence"]["tests"]
-    if tests:
-        lines.extend(f"- {item}" for item in tests)
-    else:
-        lines.append("- No explicit test input provided")
-    lines.extend(
-        [
-            "",
-            "## 3. 目标原生结果",
-            "",
-            "### 目标行为",
-            "",
-            f"- Deliver `{req['name']}` into the iOS repository using scoped patching",
-            "",
-            "### 期望与 Flutter 保持一致的点",
-            "",
-        ]
-    )
-    lines.extend(f"- {item}" for item in behavior["acceptance_points"])
-    lines.extend(["", "### 提取到的状态与交互", ""])
-    if behavior["states"]:
-        lines.extend(f"- State: `{item['name']}` (`{item['kind']}`)" for item in behavior["states"])
-    if behavior["interactions"]:
-        lines.extend(f"- Interaction: `{item}`" for item in behavior["interactions"])
-    if behavior["strings"]:
-        lines.extend(f"- String: `{item}`" for item in behavior["strings"])
-    if behavior["assets"]:
-        lines.extend(f"- Asset: `{item}`" for item in behavior["assets"])
-    if not any([behavior["states"], behavior["interactions"], behavior["strings"], behavior["assets"]]):
-        lines.append("- No additional behavior metadata extracted from Flutter files")
-    lines.extend(
-        [
-            "",
-            "## 4. 计划触点",
-            "",
-            "### 需更新的现有文件",
-            "",
-        ]
-    )
-    if native_impact["existing_files"]:
-        for item in native_impact["selected_touchpoints"]:
-            if item["path"] in native_impact["existing_files"]:
-                lines.append(
-                    f"- `{item['path']}`: {item['reason']} | kind=`{item.get('kind', 'other')}` | "
-                    f"ui_role=`{item.get('ui_role', 'non_ui')}` | risk=`{item.get('risk', 'low')}`"
-                )
-    else:
-        lines.append("- No existing file selected yet")
-    lines.extend(
-        [
-            "",
-            "### 计划新建的文件",
-            "",
-        ]
-    )
-    if patch_plan["create"]:
-        lines.extend(f"- `{item}`: planned create" for item in patch_plan["create"])
-    else:
-        lines.append("- No new file is planned in this initial output")
-    lines.extend(
-        [
-            "",
-            "### 可能涉及但暂不自动处理的注册点",
-            "",
-        ]
-    )
-    if patch_plan["manual_candidates"]:
-        for item in patch_plan["manual_candidates"]:
-            detail = manual_lookup.get(item, {})
-            lines.append(
-                f"- `{item}`: {detail.get('reason', 'manual candidate')} | risk=`{detail.get('risk', 'high')}`"
-            )
-    else:
-        lines.append("- None")
-    lines.extend(
-        [
-            "",
-            "## 5. 计划动作",
-            "",
-            "### UI",
-            "",
-            "- 将代表页面映射为 `primary_screen / auxiliary_dialog / auxiliary_overlay / component_view`",
-            "",
-            "### 状态与交互",
-            "",
-            "- Map Flutter behavior into the selected iOS touchpoints",
-            "",
-            "### Networking / Model",
-            "",
-            "- Reuse the profiled networking/model conventions where needed",
-            "",
-            "### 路由 / 注册",
-            "",
-            "- Keep route or global registration changes behind explicit review",
-            "",
-            "## 6. 不支持项与人工处理项",
-            "",
-            "### 当前不支持项",
-            "",
-        ]
-    )
-    if contract["unsupported"]:
-        lines.extend(f"- {item}" for item in contract["unsupported"])
-    else:
-        lines.append("- None declared in this initial output")
-    lines.extend(
-        [
-            "",
-            "### 需人工处理项",
-            "",
-        ]
-    )
-    if patch_plan["manual_candidates"]:
-        for item in patch_plan["manual_candidates"]:
-            detail = manual_lookup.get(item, {})
-            lines.append(f"- {item}: {detail.get('reason', 'manual candidate')}")
-    else:
-        lines.append("- None")
-    lines.extend(
-        [
-            "",
-            "## 7. 风险摘要",
-            "",
-            f"- Overall Risk: `{overall_risk}`",
-            "- Main Risks:",
-            f"  - Native touchpoint confidence is `{native_impact_confidence}` and may still need manual refinement",
-        "",
-            "## 8. 确认闸门",
-            "",
-            "- 当前尚未修改任何原生代码",
-            "- 如果确认本计划，将进入 `apply` 阶段",
-            "- Apply 阶段将依据 `requirement_sync_contract.yaml` 和本计划执行 patch",
-        ]
-    )
-    return "\n".join(lines)
 
 
 def render_touchpoints(contract: dict) -> str:
@@ -2303,7 +1891,7 @@ def render_touchpoints(contract: dict) -> str:
                 "",
             ]
         )
-    lines.extend(["## 3. 新建文件触点", "", "- None", "", "## 4. 注册点与全局触点", ""])
+    lines.extend(["## 3. 新建文件触点", "", "- None", "", "## 4. 人工候选触点（注册点与全局触点）", ""])
     manual = contract["patch_plan"]["manual_candidates"]
     if not manual:
         lines.append("- None")
@@ -2319,27 +1907,8 @@ def render_touchpoints(contract: dict) -> str:
                     f"- Confidence: `{detail.get('confidence', 'medium')}`",
                     f"- Risk: `{detail.get('risk', 'high')}`",
                     f"- Reason: {detail.get('reason', 'Global touchpoint should stay under explicit review')}",
-                    "- Note:",
-                    "  - Keep this out of automatic apply unless explicitly approved.",
-                    "",
-                ]
-            )
-    lines.extend(["## 5. 人工候选触点", ""])
-    if not manual:
-        lines.append("- None")
-    else:
-        for item in manual:
-            detail = manual_lookup.get(item, {})
-            lines.extend(
-                [
-                    f"### `{item}`",
-                    "",
-                    f"- Type: `{detail.get('kind', 'registration_point')}`",
-                    f"- Confidence: `{detail.get('confidence', 'medium')}`",
-                    f"- Risk: `{detail.get('risk', 'high')}`",
-                    f"- Reason: {detail.get('reason', 'Global integration should be reviewed manually in V1')}",
-                    "- Suggested Manual Action:",
-                    "  - Review and wire this touchpoint after plan approval.",
+                    "- Suggested Action:",
+                    "  - Review and wire this touchpoint after plan approval. Keep out of automatic apply unless explicitly approved.",
                     "",
                 ]
             )
@@ -2637,150 +2206,84 @@ def collect_hunk_new_classes(hunk_facts: object) -> list[dict]:
     return classes
 
 
-def collect_hunk_fields(hunk_facts: object) -> dict[str, list[str]]:
-    """Extract all structured fields from hunk_facts for coverage checking.
 
-    Returns dict with keys: persistence_keys, analytics_events, ab_gates, new_methods.
-    Each value is a list of identifier strings.
-    """
-    result: dict[str, list[str]] = {
-        "persistence_keys": [],
-        "analytics_events": [],
-        "ab_gates": [],
-        "new_methods": [],
-    }
-    entries: list[dict] = []
-
-    if isinstance(hunk_facts, dict):
-        business_hunks = hunk_facts.get("business_hunks")
-        if isinstance(business_hunks, list):
-            entries = [item for item in business_hunks if isinstance(item, dict)]
-        else:
-            entries = [v for v in hunk_facts.values() if isinstance(v, dict)]
-    elif isinstance(hunk_facts, list):
-        entries = [item for item in hunk_facts if isinstance(item, dict)]
-
-    for entry in entries:
-        for key in ("persistence_keys", "analytics_events", "ab_gates"):
-            items = entry.get(key, [])
-            if isinstance(items, list):
-                result[key].extend(str(x).strip() for x in items if str(x).strip())
-        methods = entry.get("new_methods", [])
-        if isinstance(methods, list):
-            for m in methods:
-                if isinstance(m, dict):
-                    name = str(m.get("name") or "").strip()
-                    if name:
-                        result["new_methods"].append(name)
-                elif isinstance(m, str) and m.strip():
-                    result["new_methods"].append(m.strip())
-    return result
+def _iter_actionable_tasks(tasks: list[dict]):
+    for task in tasks:
+        if not isinstance(task, dict):
+            continue
+        planned_action = str(task.get("planned_action") or "review")
+        if planned_action not in {"update", "create", "manual"}:
+            continue
+        task_name = task.get("task_name") or task.get("task_id") or "unknown_task"
+        yield task, task_name
 
 
-def build_plan_validation(contract: dict, sync_plan_text: str, tasks: list[dict] | None = None, llm_plan: dict | None = None, run_dir: Path | None = None) -> dict:
-    checks: list[dict] = []
+def _check_v1(sync_plan_text: str) -> dict:
+    hits = find_unresolved_items(sync_plan_text)
+    return {"id": "V1", "name": "无未决项", "result": "PASS" if not hits else "FAIL", "detail": "; ".join(hits[:8]) if hits else ""}
 
-    unresolved_hits = find_unresolved_items(sync_plan_text)
-    checks.append(
-        {
-            "id": "V1",
-            "name": "无未决项",
-            "result": "PASS" if not unresolved_hits else "FAIL",
-            "detail": "" if not unresolved_hits else "; ".join(unresolved_hits[:8]),
-        }
-    )
 
-    selected_touchpoints = [
-        item
-        for item in contract.get("native_impact", {}).get("selected_touchpoints", [])
+def _check_v2(contract: dict) -> dict:
+    selected = [
+        item for item in contract.get("native_impact", {}).get("selected_touchpoints", [])
         if item.get("path") in set(contract.get("patch_plan", {}).get("update", []))
     ]
-    missing_reasons = [item.get("path", "unknown") for item in selected_touchpoints if not (item.get("reason") or "").strip()]
-    checks.append(
-        {
-            "id": "V2",
-            "name": "入口已定位",
-            "result": "PASS" if not missing_reasons else "FAIL",
-            "detail": "" if not missing_reasons else "缺少触点原因: " + ", ".join(missing_reasons[:8]),
-        }
-    )
+    missing = [item.get("path", "unknown") for item in selected if not (item.get("reason") or "").strip()]
+    return {"id": "V2", "name": "入口已定位", "result": "PASS" if not missing else "FAIL", "detail": "缺少触点原因: " + ", ".join(missing[:8]) if missing else ""}
 
+
+def _check_v3(contract: dict, tasks: list[dict]) -> dict:
+    selected = [
+        item for item in contract.get("native_impact", {}).get("selected_touchpoints", [])
+        if item.get("path") in set(contract.get("patch_plan", {}).get("update", []))
+    ]
     weak_reason_paths = []
-    for item in selected_touchpoints:
+    for item in selected:
         reason = (item.get("reason") or "").lower()
         if reason and not any(token in reason for token in ("trigger", "flow", "delegate", "callback", "事件", "场景", "链路", "入口")):
             weak_reason_paths.append(item.get("path", "unknown"))
     task_chain_gaps: list[str] = []
-    normalized_tasks = tasks or []
-    for task in normalized_tasks:
-        if not isinstance(task, dict):
-            continue
-        task_name = task.get("task_name") or task.get("task_id") or "unknown_task"
+    for task, task_name in _iter_actionable_tasks(tasks):
         trigger = str(task.get("trigger_or_precondition") or "")
-        behavior_contract = task.get("behavior_contract", {})
-        if not isinstance(behavior_contract, dict):
-            behavior_contract = {}
-        logic_constraints = behavior_contract.get("logic_constraints", [])
-        interactions = behavior_contract.get("interactions", [])
-        planned_action = str(task.get("planned_action") or "review")
-        if planned_action in {"update", "create", "manual"}:
-            if not has_descriptive_trigger(trigger):
-                task_chain_gaps.append(f"{task_name}: 触发条件描述不足")
-            has_logic = isinstance(logic_constraints, list) and len([x for x in logic_constraints if str(x).strip()]) > 0
-            has_interactions = isinstance(interactions, list) and len([x for x in interactions if str(x).strip()]) > 0
-            if not (has_logic or has_interactions):
-                task_chain_gaps.append(f"{task_name}: 缺少逻辑约束/关键交互")
-
-    v3_warn_details: list[str] = []
+        bc = task.get("behavior_contract", {})
+        if not isinstance(bc, dict):
+            bc = {}
+        logic = bc.get("logic_constraints", [])
+        interactions = bc.get("interactions", [])
+        if not has_descriptive_trigger(trigger):
+            task_chain_gaps.append(f"{task_name}: 触发条件描述不足")
+        has_logic = isinstance(logic, list) and any(str(x).strip() for x in logic)
+        has_inter = isinstance(interactions, list) and any(str(x).strip() for x in interactions)
+        if not (has_logic or has_inter):
+            task_chain_gaps.append(f"{task_name}: 缺少逻辑约束/关键交互")
+    details: list[str] = []
     if task_chain_gaps:
-        v3_warn_details.extend(task_chain_gaps[:8])
-    elif not normalized_tasks and weak_reason_paths:
-        v3_warn_details.append("建议补充场景/链路描述: " + ", ".join(weak_reason_paths[:8]))
-    checks.append(
-        {
-            "id": "V3",
-            "name": "入口定位方式",
-            "result": "PASS" if not v3_warn_details else "WARN",
-            "detail": "" if not v3_warn_details else "; ".join(v3_warn_details),
-        }
-    )
+        details = task_chain_gaps[:8]
+    elif not tasks and weak_reason_paths:
+        details = ["建议补充场景/链路描述: " + ", ".join(weak_reason_paths[:8])]
+    return {"id": "V3", "name": "入口定位方式", "result": "PASS" if not details else "WARN", "detail": "; ".join(details) if details else ""}
 
-    model_related = [
-        item
-        for item in contract.get("native_impact", {}).get("selected_touchpoints", [])
-        if item.get("kind") == "feature_model"
-    ]
-    # V4: check that model-related tasks provide field_alignment
-    v4_missing: list[str] = []
+
+def _check_v4(contract: dict, tasks: list[dict]) -> dict:
+    model_related = [item for item in contract.get("native_impact", {}).get("selected_touchpoints", []) if item.get("kind") == "feature_model"]
+    missing: list[str] = []
     if model_related:
-        for task in normalized_tasks:
+        for task in tasks:
             if not isinstance(task, dict):
                 continue
             landing = task.get("native_landing", {})
             if not isinstance(landing, dict):
                 continue
-            landing_kind = str(landing.get("kind") or "").lower()
-            if landing_kind not in {"model", "entity", "dto", "feature_model"}:
+            if str(landing.get("kind") or "").lower() not in {"model", "entity", "dto", "feature_model"}:
                 continue
-            task_name = str(task.get("task_name") or task.get("task_id") or "unnamed")
-            field_alignment = task.get("field_alignment")
-            if not field_alignment:
-                v4_missing.append(task_name)
+            if not task.get("field_alignment"):
+                missing.append(str(task.get("task_name") or task.get("task_id") or "unnamed"))
+    return {"id": "V4", "name": "字段对齐表", "result": "WARN" if missing else "PASS", "detail": f"以下 model task 缺少 field_alignment: {', '.join(missing[:8])}" if missing else ""}
 
-    v4_result = "PASS"
-    if v4_missing:
-        v4_result = "WARN"
-    checks.append(
-        {
-            "id": "V4",
-            "name": "字段对齐表",
-            "result": v4_result,
-            "detail": "" if not v4_missing else f"以下 model task 缺少 field_alignment: {', '.join(v4_missing[:8])}",
-        }
-    )
 
-    v5_failures: list[str] = []
-    v5_warnings: list[str] = []
+def _check_v5(contract: dict, llm_plan: dict | None, run_dir: Path | None) -> dict:
+    failures: list[str] = []
+    warnings: list[str] = []
     figma_pages = []
     if isinstance(llm_plan, dict):
         figma_pages = llm_plan.get("figma", {}).get("pages", []) if isinstance(llm_plan.get("figma"), dict) else []
@@ -2788,10 +2291,8 @@ def build_plan_validation(contract: dict, sync_plan_text: str, tasks: list[dict]
         ui_role = item.get("ui_role")
         if ui_role not in {"primary_screen", "auxiliary_dialog", "auxiliary_overlay", "component_view"}:
             continue
-        path = item.get("path", "unknown")
         if not item.get("source_screens"):
-            v5_failures.append(f"{path}: 缺少 source_screens")
-    # Validate Figma link format and screenshot existence
+            failures.append(f"{item.get('path', 'unknown')}: 缺少 source_screens")
     figma_link_re = re.compile(r"https://www\.figma\.com/design/[A-Za-z0-9]+/.+\?node-id=")
     for page in figma_pages:
         if not isinstance(page, dict):
@@ -2804,69 +2305,39 @@ def build_plan_validation(contract: dict, sync_plan_text: str, tasks: list[dict]
             screenshot = str(variant.get("screenshot") or "")
             label = str(variant.get("label") or "")
             if link and not figma_link_re.match(link):
-                v5_warnings.append(f"{page_name}/{label}: Figma 链接格式异常")
+                warnings.append(f"{page_name}/{label}: Figma 链接格式异常")
             if screenshot and run_dir is not None and not (run_dir / screenshot).exists():
-                v5_warnings.append(f"{page_name}/{label}: 截图文件不存在 ({screenshot})")
-    v5_result = "FAIL" if v5_failures else ("WARN" if v5_warnings else "PASS")
-    v5_detail = "; ".join((v5_failures + v5_warnings)[:8])
-    checks.append(
-        {
-            "id": "V5",
-            "name": "UI 设计参考",
-            "result": v5_result,
-            "detail": v5_detail,
-        }
-    )
+                warnings.append(f"{page_name}/{label}: 截图文件不存在 ({screenshot})")
+    result = "FAIL" if failures else ("WARN" if warnings else "PASS")
+    return {"id": "V5", "name": "UI 设计参考", "result": result, "detail": "; ".join((failures + warnings)[:8])}
 
+
+def _check_v6(contract: dict) -> dict:
     behavior = contract.get("behavior", {})
-    has_trigger_signal = bool(behavior.get("user_flows") or behavior.get("interactions"))
-    checks.append(
-        {
-            "id": "V6",
-            "name": "触发方式",
-            "result": "PASS" if has_trigger_signal else "FAIL",
-            "detail": "" if has_trigger_signal else "behavior 中缺少 user_flows/interactions，无法确认触发方式。",
-        }
-    )
+    ok = bool(behavior.get("user_flows") or behavior.get("interactions"))
+    return {"id": "V6", "name": "触发方式", "result": "PASS" if ok else "FAIL", "detail": "" if ok else "behavior 中缺少 user_flows/interactions，无法确认触发方式。"}
 
-    mapping_failures: list[str] = []
-    for task in normalized_tasks:
-        if not isinstance(task, dict):
-            continue
-        planned_action = str(task.get("planned_action") or "review")
-        if planned_action not in {"update", "create", "manual"}:
-            continue
-        task_name = task.get("task_name") or task.get("task_id") or "unknown_task"
+
+def _check_v7(tasks: list[dict]) -> dict:
+    failures: list[str] = []
+    for task, task_name in _iter_actionable_tasks(tasks):
         mapping = task.get("mapping_proof", {})
         if not isinstance(mapping, dict):
-            mapping_failures.append(f"{task_name}: 缺少 mapping_proof")
-            continue
+            failures.append(f"{task_name}: 缺少 mapping_proof"); continue
         status = str(mapping.get("status", "unmapped")).lower()
-        confidence = str(mapping.get("confidence", "low")).lower()
-        flutter_entrypoints = mapping.get("flutter_entrypoints", [])
-        native_chain = mapping.get("native_chain", [])
-        evidence = mapping.get("evidence", [])
         if status != "mapped":
-            mapping_failures.append(f"{task_name}: mapping_status={status}")
-            continue
+            failures.append(f"{task_name}: mapping_status={status}"); continue
+        confidence = str(mapping.get("confidence", "low")).lower()
         if confidence not in {"high", "medium", "low"}:
-            mapping_failures.append(f"{task_name}: mapping_confidence 无效")
-        if not isinstance(flutter_entrypoints, list) or not [x for x in flutter_entrypoints if str(x).strip()]:
-            mapping_failures.append(f"{task_name}: 缺少 flutter_entrypoints")
-        if not isinstance(native_chain, list) or not [x for x in native_chain if str(x).strip()]:
-            mapping_failures.append(f"{task_name}: 缺少 native_chain")
-        if not isinstance(evidence, list) or not [x for x in evidence if str(x).strip()]:
-            mapping_failures.append(f"{task_name}: 缺少 mapping_evidence")
+            failures.append(f"{task_name}: mapping_confidence 无效")
+        for field in ("flutter_entrypoints", "native_chain", "evidence"):
+            val = mapping.get(field, [])
+            if not isinstance(val, list) or not [x for x in val if str(x).strip()]:
+                failures.append(f"{task_name}: 缺少 {field}")
+    return {"id": "V7", "name": "映射证明", "result": "PASS" if not failures else "FAIL", "detail": "; ".join(failures[:8]) if failures else ""}
 
-    checks.append(
-        {
-            "id": "V7",
-            "name": "映射证明",
-            "result": "PASS" if not mapping_failures else "FAIL",
-            "detail": "" if not mapping_failures else "; ".join(mapping_failures[:8]),
-        }
-    )
 
+def _check_v8(llm_plan: dict | None) -> dict:
     pipeline_missing: list[str] = []
     artifact_missing: list[str] = []
     mapping_pipeline = {}
@@ -2876,193 +2347,118 @@ def build_plan_validation(contract: dict, sync_plan_text: str, tasks: list[dict]
             mp = meta.get("mapping_pipeline", {})
             if isinstance(mp, dict):
                 mapping_pipeline = mp
-
-    required_steps = ["capability_split", "flutter_hunk_extract", "flutter_chain_extract", "native_chain_match", "disambiguation"]
-    for step in required_steps:
+    for step in ("capability_split", "flutter_hunk_extract", "flutter_chain_extract", "native_chain_match", "disambiguation"):
         value = mapping_pipeline.get(step)
         normalized = str(value).strip().lower()
-        ok = value is True or normalized in {"done", "completed", "pass", "passed", "yes", "true"}
-        if not ok:
+        if not (value is True or normalized in {"done", "completed", "pass", "passed", "yes", "true"}):
             pipeline_missing.append(step)
-
-    if not isinstance(llm_plan, dict) or not isinstance(llm_plan.get("hunk_facts"), (dict, list)) or not llm_plan.get("hunk_facts"):
-        artifact_missing.append("hunk_facts")
-    if not isinstance(llm_plan, dict) or not str(llm_plan.get("capability_slices", "")).strip():
-        artifact_missing.append("capability_slices")
-    if not isinstance(llm_plan, dict) or not isinstance(llm_plan.get("flutter_chain_map"), dict) or not llm_plan.get("flutter_chain_map"):
-        artifact_missing.append("flutter_chain_map")
-    if not isinstance(llm_plan, dict) or not isinstance(llm_plan.get("native_chain_candidates"), dict) or not llm_plan.get("native_chain_candidates"):
-        artifact_missing.append("native_chain_candidates")
-    if not isinstance(llm_plan, dict) or not str(llm_plan.get("mapping_disambiguation", "")).strip():
-        artifact_missing.append("mapping_disambiguation")
-
-    v8_failures = []
+    for key, check_type in [("hunk_facts", (dict, list)), ("flutter_chain_map", dict), ("native_chain_candidates", dict)]:
+        if not isinstance(llm_plan, dict) or not isinstance(llm_plan.get(key), check_type) or not llm_plan.get(key):
+            artifact_missing.append(key)
+    for key in ("capability_slices", "mapping_disambiguation"):
+        if not isinstance(llm_plan, dict) or not str(llm_plan.get(key, "")).strip():
+            artifact_missing.append(key)
+    failures = []
     if pipeline_missing:
-        v8_failures.append("缺少流程步骤: " + ", ".join(pipeline_missing))
+        failures.append("缺少流程步骤: " + ", ".join(pipeline_missing))
     if artifact_missing:
-        v8_failures.append("缺少流程产物: " + ", ".join(artifact_missing))
+        failures.append("缺少流程产物: " + ", ".join(artifact_missing))
+    return {"id": "V8", "name": "自动映射流程完整性", "result": "PASS" if not failures else "FAIL", "detail": "; ".join(failures[:8]) if failures else ""}
 
-    checks.append(
-        {
-            "id": "V8",
-            "name": "自动映射流程完整性",
-            "result": "PASS" if not v8_failures else "FAIL",
-            "detail": "" if not v8_failures else "; ".join(v8_failures[:8]),
-        }
-    )
 
-    v9_failures: list[str] = []
-    for task in normalized_tasks:
-        if not isinstance(task, dict):
-            continue
-        planned_action = str(task.get("planned_action") or "review")
-        if planned_action not in {"update", "create", "manual"}:
-            continue
-        task_name = task.get("task_name") or task.get("task_id") or "unknown_task"
+def _check_v9(tasks: list[dict], llm_plan: dict | None) -> dict:
+    failures: list[str] = []
+    orchestration_keywords = {
+        "controller", "coordinator", "manager",
+        "activity", "fragment", "viewmodel", "view_model",
+        "presenter", "interactor", "handler", "glue",
+    }
+    if isinstance(llm_plan, dict) and isinstance(llm_plan.get("orchestration_keywords"), list):
+        orchestration_keywords.update(k.lower() for k in llm_plan["orchestration_keywords"] if isinstance(k, str))
+    for task, task_name in _iter_actionable_tasks(tasks):
         landing = task.get("native_landing", {})
         mapping = task.get("mapping_proof", {})
         if not isinstance(landing, dict) or not isinstance(mapping, dict):
-            v9_failures.append(f"{task_name}: 缺少 landing/mapping 结构")
-            continue
+            failures.append(f"{task_name}: 缺少 landing/mapping 结构"); continue
         primary_path = str(landing.get("primary_path") or "")
         entry_kind = str(mapping.get("entry_kind") or "").strip().lower()
+        has_orch = any(kw in primary_path.lower() for kw in orchestration_keywords) or entry_kind == "orchestration_entry"
+        if not has_orch:
+            failures.append(f"{task_name}: 主落点非编排入口（primary={primary_path or 'none'}）")
         reverse_trace = mapping.get("reverse_trace", [])
         evidence = mapping.get("evidence", [])
-        # Default orchestration keywords cover iOS (Controller/Coordinator/Manager)
-        # and Android (Activity/Fragment/ViewModel) patterns
-        orchestration_keywords = {
-            "controller", "coordinator", "manager",
-            "activity", "fragment", "viewmodel", "view_model",
-            "presenter", "interactor", "handler", "glue",
-        }
-        # Allow llm_plan to extend or override
-        if isinstance(llm_plan, dict) and isinstance(llm_plan.get("orchestration_keywords"), list):
-            orchestration_keywords.update(k.lower() for k in llm_plan["orchestration_keywords"] if isinstance(k, str))
-        path_lower = primary_path.lower()
-        has_orchestration_signal = (
-            any(kw in path_lower for kw in orchestration_keywords)
-            or entry_kind == "orchestration_entry"
-        )
-        if not has_orchestration_signal:
-            v9_failures.append(f"{task_name}: 主落点非编排入口（primary={primary_path or 'none'}）")
         if not isinstance(reverse_trace, list) or not [x for x in reverse_trace if str(x).strip()]:
-            v9_failures.append(f"{task_name}: 缺少 reverse_trace")
+            failures.append(f"{task_name}: 缺少 reverse_trace")
         if not isinstance(evidence, list) or len([x for x in evidence if str(x).strip()]) < 2:
-            v9_failures.append(f"{task_name}: 映射证据不足（<2）")
+            failures.append(f"{task_name}: 映射证据不足（<2）")
+    return {"id": "V9", "name": "入口级映射真实性", "result": "PASS" if not failures else "FAIL", "detail": "; ".join(failures[:8]) if failures else ""}
 
-    checks.append(
-        {
-            "id": "V9",
-            "name": "入口级映射真实性",
-            "result": "PASS" if not v9_failures else "FAIL",
-            "detail": "" if not v9_failures else "; ".join(v9_failures[:8]),
-        }
-    )
 
-    v10_failures: list[str] = []
+def _check_v10(contract: dict, tasks: list[dict], llm_plan: dict | None) -> dict:
+    failures: list[str] = []
     repo_root = Path(str(contract.get("target", {}).get("repo_root", "") or ".")).resolve()
-    for task in normalized_tasks:
-        if not isinstance(task, dict):
-            continue
-        planned_action = str(task.get("planned_action") or "review")
-        if planned_action not in {"update", "create", "manual"}:
-            continue
-        task_name = task.get("task_name") or task.get("task_id") or "unknown_task"
+    custom_lifecycle_tokens = llm_plan.get("lifecycle_tokens") if isinstance(llm_plan, dict) else None
+    for task, task_name in _iter_actionable_tasks(tasks):
         lifecycle = str(task.get("trigger_lifecycle") or task.get("trigger_or_precondition") or "")
         mapping = task.get("mapping_proof", {})
         if not isinstance(mapping, dict):
-            v10_failures.append(f"{task_name}: missing mapping_proof")
-            continue
+            failures.append(f"{task_name}: missing mapping_proof"); continue
         native_chain = mapping.get("native_chain", [])
         evidence_lines = mapping.get("evidence_lines", [])
         chain_text = " ".join(str(x).lower() for x in native_chain) if isinstance(native_chain, list) else ""
-        custom_lifecycle_tokens = llm_plan.get("lifecycle_tokens") if isinstance(llm_plan, dict) else None
         expected = lifecycle_expected_tokens(lifecycle, custom_tokens=custom_lifecycle_tokens)
         if expected and not any(token in chain_text for token in expected):
-            v10_failures.append(f"{task_name}: lifecycle mismatch ({lifecycle})")
+            failures.append(f"{task_name}: lifecycle mismatch ({lifecycle})")
         ok_evidence, _ = validate_evidence_lines(repo_root, evidence_lines if isinstance(evidence_lines, list) else [])
         if not ok_evidence:
-            v10_failures.append(f"{task_name}: evidence_lines 不可执行")
+            failures.append(f"{task_name}: evidence_lines 不可执行")
+    return {"id": "V10", "name": "生命周期与证据可执行性", "result": "PASS" if not failures else "FAIL", "detail": "; ".join(failures[:8]) if failures else ""}
 
-    checks.append(
-        {
-            "id": "V10",
-            "name": "生命周期与证据可执行性",
-            "result": "PASS" if not v10_failures else "FAIL",
-            "detail": "" if not v10_failures else "; ".join(v10_failures[:8]),
-        }
-    )
 
-    v11_failures: list[str] = []
+def _check_v11(tasks: list[dict], llm_plan: dict | None) -> dict:
+    failures: list[str] = []
     hunk_files = collect_hunk_files(llm_plan.get("hunk_facts") if isinstance(llm_plan, dict) else None)
-    for task in normalized_tasks:
-        if not isinstance(task, dict):
-            continue
-        planned_action = str(task.get("planned_action") or "review")
-        if planned_action not in {"update", "create", "manual"}:
-            continue
+    for task, task_name in _iter_actionable_tasks(tasks):
         if not is_popup_task(task):
             continue
-        task_name = task.get("task_name") or task.get("task_id") or "unknown_task"
         mapping = task.get("mapping_proof", {})
         if not isinstance(mapping, dict):
-            v11_failures.append(f"{task_name}: missing mapping_proof")
-            continue
+            failures.append(f"{task_name}: missing mapping_proof"); continue
         native_chain = mapping.get("native_chain", [])
         first_chain = str(native_chain[0]) if isinstance(native_chain, list) and native_chain else ""
         entry_semantics = str(mapping.get("entry_semantics") or "").strip().lower()
         flutter_entrypoints = mapping.get("flutter_entrypoints", [])
         if entry_semantics != "popup_show":
-            v11_failures.append(f"{task_name}: entry_semantics 必须为 popup_show")
+            failures.append(f"{task_name}: entry_semantics 必须为 popup_show")
         if not popup_entry_ok(first_chain):
-            v11_failures.append(f"{task_name}: 首条 native_chain 不是 show/present 入口")
+            failures.append(f"{task_name}: 首条 native_chain 不是 show/present 入口")
         if "didclick" in first_chain.lower() or "purchase(" in first_chain.lower():
-            v11_failures.append(f"{task_name}: 首条 native_chain 误用点击/购买回调")
+            failures.append(f"{task_name}: 首条 native_chain 误用点击/购买回调")
         if isinstance(flutter_entrypoints, list) and flutter_entrypoints:
-            matched = any(str(item).strip() in hunk_files for item in flutter_entrypoints)
-            if hunk_files and not matched:
-                v11_failures.append(f"{task_name}: flutter_entrypoints 与 hunk_facts 未对齐")
+            if hunk_files and not any(str(item).strip() in hunk_files for item in flutter_entrypoints):
+                failures.append(f"{task_name}: flutter_entrypoints 与 hunk_facts 未对齐")
+    return {"id": "V11", "name": "弹窗入口语义约束", "result": "PASS" if not failures else "FAIL", "detail": "; ".join(failures[:8]) if failures else ""}
 
-    checks.append(
-        {
-            "id": "V11",
-            "name": "弹窗入口语义约束",
-            "result": "PASS" if not v11_failures else "FAIL",
-            "detail": "" if not v11_failures else "; ".join(v11_failures[:8]),
-        }
-    )
 
-    # --- V12: 跨端差异闭环校验 ---
-    v12_failures: list[str] = []
-    gap_doc_names = ["cross_platform_gap.md", "design_tradeoff.md", "acceptance_alignment.md"]
-    has_cross_platform_gap_task = False
-    for task in normalized_tasks:
-        if not isinstance(task, dict):
+def _check_v12(tasks: list[dict], run_dir: Path | None) -> dict:
+    failures: list[str] = []
+    gap_docs = ["cross_platform_gap.md", "design_tradeoff.md", "acceptance_alignment.md"]
+    for task in tasks:
+        if not isinstance(task, dict) or not task.get("cross_platform_gap"):
             continue
-        if not task.get("cross_platform_gap"):
-            continue
-        has_cross_platform_gap_task = True
         task_name = str(task.get("task_name") or task.get("capability_goal") or "unnamed")
         if run_dir is not None:
-            for doc_name in gap_doc_names:
-                if not (run_dir / doc_name).exists():
-                    v12_failures.append(f"{task_name}: 缺少 {doc_name}")
-    checks.append(
-        {
-            "id": "V12",
-            "name": "跨端差异闭环",
-            "result": "PASS" if not v12_failures else "FAIL",
-            "detail": "" if not v12_failures else "; ".join(v12_failures[:8]),
-        }
-    )
+            for doc in gap_docs:
+                if not (run_dir / doc).exists():
+                    failures.append(f"{task_name}: 缺少 {doc}")
+    return {"id": "V12", "name": "跨端差异闭环", "result": "PASS" if not failures else "FAIL", "detail": "; ".join(failures[:8]) if failures else ""}
 
-    # --- V13: diff 一致性（新增 class 覆盖检查） ---
-    v13_failures: list[str] = []
+
+def _check_v13(tasks: list[dict], llm_plan: dict | None, sync_plan_text: str) -> dict:
+    failures: list[str] = []
     hunk_new_classes = collect_hunk_new_classes(llm_plan.get("hunk_facts") if isinstance(llm_plan, dict) else None)
-
-    # Build a searchable text from all tasks for coverage matching
     tasks_search_text = ""
-    for task in normalized_tasks:
+    for task in tasks:
         if not isinstance(task, dict):
             continue
         tasks_search_text += " ".join([
@@ -3075,86 +2471,66 @@ def build_plan_validation(contract: dict, sync_plan_text: str, tasks: list[dict]
             json.dumps(task.get("acceptance_assertions", []), ensure_ascii=False),
             json.dumps(task.get("mapping_proof", {}), ensure_ascii=False),
         ]).lower() + " "
-
-    # Also include the raw edit_tasks markdown for broader matching
     tasks_search_text += " " + sync_plan_text.lower()
-
-    uncovered_classes: list[str] = []
+    uncovered: list[str] = []
     for cls in hunk_new_classes:
-        cls_name = cls["name"]
-        # Strip leading underscore for matching (private classes like _Foo)
-        match_name = cls_name.lstrip("_").lower()
+        match_name = cls["name"].lstrip("_").lower()
         if match_name and match_name not in tasks_search_text:
-            label = f"{cls_name} ({cls['file']})"
+            label = f"{cls['name']} ({cls['file']})"
             if cls["user_facing"]:
                 label += " [user_facing]"
-            uncovered_classes.append(label)
-
-    if uncovered_classes:
-        user_facing_uncovered = [c for c in uncovered_classes if "[user_facing]" in c]
-        if user_facing_uncovered:
-            v13_failures.append("user_facing class 未被 edit_tasks 覆盖: " + ", ".join(user_facing_uncovered[:8]))
+            uncovered.append(label)
+    if uncovered:
+        uf = [c for c in uncovered if "[user_facing]" in c]
+        if uf:
+            failures.append("user_facing class 未被 edit_tasks 覆盖: " + ", ".join(uf[:8]))
         else:
-            v13_failures.append("非 user_facing class 未覆盖（WARN）: " + ", ".join(uncovered_classes[:8]))
+            failures.append("非 user_facing class 未覆盖（WARN）: " + ", ".join(uncovered[:8]))
+    has_uf_gap = any("[user_facing]" in c for c in uncovered)
+    return {"id": "V13", "name": "diff 一致性（新增 class 覆盖）", "result": "FAIL" if has_uf_gap else ("WARN" if uncovered else "PASS"), "detail": "; ".join(failures[:8]) if failures else ""}
 
-    v13_has_user_facing_gap = any("[user_facing]" in c for c in uncovered_classes)
-    checks.append(
-        {
-            "id": "V13",
-            "name": "diff 一致性（新增 class 覆盖）",
-            "result": "FAIL" if v13_has_user_facing_gap else ("WARN" if uncovered_classes else "PASS"),
-            "detail": "" if not v13_failures else "; ".join(v13_failures[:8]),
-        }
-    )
 
-    # --- V14: hunk_facts 未覆盖事实检查 ---
-    v14_failures: list[str] = []
-    v14_warnings: list[str] = []
+def _check_v14(llm_plan: dict | None) -> dict:
+    failures: list[str] = []
+    warnings: list[str] = []
     chain_map = llm_plan.get("flutter_chain_map", {}) if isinstance(llm_plan, dict) else {}
     uncovered_facts = chain_map.get("uncovered_facts", []) if isinstance(chain_map, dict) else []
-
-    if isinstance(uncovered_facts, list) and uncovered_facts:
+    if isinstance(uncovered_facts, list):
         for fact in uncovered_facts:
             if not isinstance(fact, dict):
                 continue
-            fact_desc = str(fact.get("description") or fact.get("name") or str(fact))
+            desc = str(fact.get("description") or fact.get("name") or str(fact))
             disposition = str(fact.get("disposition") or fact.get("resolution") or "").strip()
-            is_user_facing = bool(fact.get("user_facing", False))
-
-            if is_user_facing and not disposition:
-                v14_failures.append(f"user_facing 未覆盖且无处置: {fact_desc}")
+            if bool(fact.get("user_facing", False)) and not disposition:
+                failures.append(f"user_facing 未覆盖且无处置: {desc}")
             elif not disposition:
-                v14_warnings.append(f"未覆盖且无处置说明: {fact_desc}")
+                warnings.append(f"未覆盖且无处置说明: {desc}")
+    result = "FAIL" if failures else ("WARN" if warnings else "PASS")
+    return {"id": "V14", "name": "hunk_facts 未覆盖事实", "result": result, "detail": "; ".join((failures[:4] + warnings[:4])) if (failures or warnings) else ""}
 
-    v14_result = "PASS"
-    if v14_failures:
-        v14_result = "FAIL"
-    elif v14_warnings:
-        v14_result = "WARN"
 
-    v14_detail_parts = v14_failures[:4] + v14_warnings[:4]
-    checks.append(
-        {
-            "id": "V14",
-            "name": "hunk_facts 未覆盖事实",
-            "result": v14_result,
-            "detail": "; ".join(v14_detail_parts) if v14_detail_parts else "",
-        }
-    )
-
-    has_fail = any(item["result"] == "FAIL" for item in checks)
-    has_warn = any(item["result"] == "WARN" for item in checks)
-    if has_fail:
-        conclusion = "FAIL"
-    elif has_warn:
-        conclusion = "WARN"
-    else:
-        conclusion = "PASS"
-
-    return {
-        "checks": checks,
-        "conclusion": conclusion,
-    }
+def build_plan_validation(contract: dict, sync_plan_text: str, tasks: list[dict] | None = None, llm_plan: dict | None = None, run_dir: Path | None = None) -> dict:
+    normalized_tasks = tasks or []
+    checks = [
+        _check_v1(sync_plan_text),
+        _check_v2(contract),
+        _check_v3(contract, normalized_tasks),
+        _check_v4(contract, normalized_tasks),
+        _check_v5(contract, llm_plan, run_dir),
+        _check_v6(contract),
+        _check_v7(normalized_tasks),
+        _check_v8(llm_plan),
+        _check_v9(normalized_tasks, llm_plan),
+        _check_v10(contract, normalized_tasks, llm_plan),
+        _check_v11(normalized_tasks, llm_plan),
+        _check_v12(normalized_tasks, run_dir),
+        _check_v13(normalized_tasks, llm_plan, sync_plan_text),
+        _check_v14(llm_plan),
+    ]
+    has_fail = any(c["result"] == "FAIL" for c in checks)
+    has_warn = any(c["result"] == "WARN" for c in checks)
+    conclusion = "FAIL" if has_fail else ("WARN" if has_warn else "PASS")
+    return {"checks": checks, "conclusion": conclusion}
 
 
 def render_plan_validation(validation: dict) -> str:
@@ -3232,138 +2608,6 @@ def render_intent_markdown(contract: dict) -> str:
         lines.append("- 暂无明确行为证据，请补充 Flutter 需求输入。")
     return "\n".join(lines)
 
-
-def parse_feature_groups_from_prd(prd_path: str | None) -> list[str]:
-    if not prd_path:
-        return []
-    path = Path(prd_path)
-    if not path.exists() or not path.is_file():
-        return []
-    lines = read_text_safe(path).splitlines()
-    groups: list[str] = []
-    for raw in lines:
-        line = raw.strip()
-        if not line:
-            continue
-        if line.startswith("-"):
-            continue
-        if "http://" in line or "https://" in line:
-            continue
-        if line not in groups:
-            groups.append(line)
-    return groups
-
-
-def classify_feature_group(path: str, ui_role: str, fallback_groups: list[str], component_counter: int) -> str:
-    lower = path.lower()
-    if ui_role == "primary_screen" or "unlock" in lower or "chapter" in lower:
-        return "章节解锁页面" if "章节解锁页面" in fallback_groups else (fallback_groups[0] if fallback_groups else "章节解锁页面")
-    if ui_role == "auxiliary_dialog" or any(token in lower for token in ["purchase", "buy", "vip"]):
-        return "充值商品弹窗" if "充值商品弹窗" in fallback_groups else (fallback_groups[0] if fallback_groups else "充值商品弹窗")
-    if ui_role == "auxiliary_overlay" or any(token in lower for token in ["retention", "retain", "overlay"]):
-        return "充值挽留" if "充值挽留" in fallback_groups else (fallback_groups[0] if fallback_groups else "充值挽留")
-    if ui_role == "component_view":
-        if "引言样式" in fallback_groups and "引言更多" in fallback_groups:
-            return "引言样式" if component_counter % 2 == 0 else "引言更多"
-        if "引言样式" in fallback_groups:
-            return "引言样式"
-        if "引言更多" in fallback_groups:
-            return "引言更多"
-    return fallback_groups[0] if fallback_groups else "功能分组待确认"
-
-
-def build_edit_tasks(contract: dict) -> list[dict]:
-    requirement = contract.get("requirement", {})
-    behavior = contract.get("behavior", {})
-    patch_plan = contract.get("patch_plan", {})
-    selected = contract.get("native_impact", {}).get("selected_touchpoints", [])
-    source = contract.get("source", {})
-
-    updates = set(patch_plan.get("update", []))
-    creates = set(patch_plan.get("create", []))
-    manuals = set(patch_plan.get("manual_candidates", []))
-
-    feature_groups = parse_feature_groups_from_prd(source.get("prd_path"))
-    if not feature_groups:
-        feature_groups = [requirement.get("name", "功能分组")]
-
-    grouped: dict[str, list[dict]] = {name: [] for name in feature_groups}
-    component_counter = 0
-    for item in selected:
-        path = item.get("path", "")
-        ui_role = item.get("ui_role", "non_ui")
-        if ui_role == "component_view":
-            component_counter += 1
-        group_name = classify_feature_group(path, ui_role, feature_groups, component_counter)
-        grouped.setdefault(group_name, []).append(item)
-
-    tasks: list[dict] = []
-    for idx, group_name in enumerate(feature_groups, start=1):
-        touchpoints = grouped.get(group_name, [])
-        touchpoint_paths = [item.get("path", "") for item in touchpoints if item.get("path")]
-
-        planned_action = "review"
-        if any(path in updates for path in touchpoint_paths):
-            planned_action = "update"
-        elif any(path in creates for path in touchpoint_paths):
-            planned_action = "create"
-        elif any(path in manuals for path in touchpoint_paths):
-            planned_action = "manual"
-
-        primary_path = touchpoint_paths[0] if touchpoint_paths else ""
-        ui_roles = sorted({item.get("ui_role", "non_ui") for item in touchpoints})
-
-        related_acceptance = [
-            item
-            for item in behavior.get("acceptance_points", [])
-            if any(key in item for key in [group_name, "figma", "Figma", "http"])
-        ]
-        if not related_acceptance:
-            related_acceptance = behavior.get("acceptance_points", [])[:3] or [f"{group_name} 与 Flutter 行为保持一致"]
-
-        related_flows = [item for item in behavior.get("user_flows", []) if any(key in item for key in ["open", "unlock", "purchase", "retention", "intro"])]
-        trigger = related_flows[0] if related_flows else f"触发 {group_name} 对应流程"
-
-        tasks.append(
-            {
-                "task_id": f"G{idx:02d}",
-                "task_name": f"功能组-{group_name}",
-                "capability_goal": group_name,
-                "trigger_or_precondition": trigger,
-                "behavior_contract": {
-                    "states": [state.get("name") for state in behavior.get("states", [])[:4] if state.get("name")],
-                    "interactions": behavior.get("interactions", [])[:4],
-                    "side_effects": behavior.get("side_effects", []),
-                    "exceptions": ["异常场景需保持可回退与可观测"],
-                },
-                "native_landing": {
-                    "primary_path": primary_path,
-                    "touchpoint_count": len(touchpoints),
-                    "ui_roles": ui_roles,
-                    "touchpoints": [
-                        {
-                            "path": item.get("path", ""),
-                            "kind": item.get("kind", "other"),
-                            "ui_role": item.get("ui_role", "non_ui"),
-                            "reason": item.get("reason", ""),
-                            "source_screens": item.get("source_screens", []),
-                        }
-                        for item in touchpoints
-                    ],
-                },
-                "edit_anchor": {
-                    "target_file": primary_path,
-                    "target_files": touchpoint_paths,
-                    "class_or_symbol_hint": Path(primary_path).stem if primary_path else group_name,
-                    "candidate_only": True,
-                },
-                "acceptance_assertions": related_acceptance,
-                "execution_mode": "cli_direct_edit",
-                "planned_action": planned_action,
-            }
-        )
-
-    return tasks
 
 
 def render_edit_tasks_markdown(tasks: list[dict]) -> str:
@@ -3499,12 +2743,8 @@ def handle_plan(args: argparse.Namespace) -> int:
     write_text(inputs.run_dir / EXECUTION_LOG_FILE, render_execution_log_template(tasks))
 
     validation = build_plan_validation(contract, edit_tasks_text, tasks=tasks, llm_plan=llm_plan, run_dir=inputs.run_dir)
-    if isinstance(llm_plan.get("plan_validation"), dict):
-        pv = llm_plan.get("plan_validation")
-        checks = pv.get("checks", [])
-        conclusion = pv.get("conclusion")
-        if isinstance(checks, list) and isinstance(conclusion, str) and checks:
-            validation = {"checks": checks, "conclusion": conclusion}
+    # NOTE: LLM plan 中的 plan_validation 仅作为参考记录，不覆盖脚本计算的验证结果。
+    # 验证门禁的权威来源是 build_plan_validation()，防止 LLM 输出绕过质量门禁。
     write_text(inputs.run_dir / PLAN_VALIDATION_FILE, render_plan_validation(validation))
 
     print("Planning artifacts generated.")
