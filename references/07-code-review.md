@@ -1,8 +1,20 @@
 # Step 7. code_review（代码审查，**强制执行，不得跳过**）
 
 > execute 完成后、verify 开始前必须执行。code review 发现的问题修完后再进 verify，避免带质量缺陷通过验收。
->
-> **与 subagent-driven-development 内置 review 的区别**：Step 6 使用 `superpowers:subagent-driven-development` 时，每个 task 内部已有 spec compliance + code quality 两阶段 review（按 task 粒度）。Step 7 是**全局审查**，关注跨 task 的一致性（如多文件的埋点完整性、持久化 key 统一格式、整体 Flutter 高保真对齐），两者不可互相替代。
+
+### 与 Step 6 内置 review 的关系
+
+Step 6 使用 `superpowers:subagent-driven-development` 时，每个 task 内部已有 spec compliance + code quality 两阶段 review。Step 7 是**全局审查**，两者**始终都执行、不可互相替代**，职责划分如下：
+
+| 维度 | Step 6 subagent review（按 task） | Step 7 全局 code_review |
+|------|-----------------------------------|------------------------|
+| **粒度** | 单个 task 内的文件 | 本次所有改动文件 |
+| **关注点** | task 实现是否符合 edit_tasks 中的行为契约 | 跨 task 一致性 + 整体质量 |
+| **典型检查** | 单 task 逻辑正确性、接口契约 | 埋点完整性、持久化 key 格式统一、AB 门控全覆盖、API 版本兼容 |
+| **Flutter 对齐** | task 级别的行为匹配 | 整体 `flutter_chain_map.json` 链路对齐 |
+| **线程/内存安全** | task 内的明显问题 | 跨 task 的 delegate 循环引用、Timer 泄漏、多 task 共享状态竞争 |
+
+> 即使 Step 6 使用 inline execution（非 subagent），Step 7 仍然必须执行。
 
 使用 `voltagent-qa-sec:code-reviewer` 对本次所有新建/修改文件执行审查，重点关注：
 

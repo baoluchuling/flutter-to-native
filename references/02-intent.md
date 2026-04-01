@@ -33,7 +33,21 @@
 
 ### 2.2 flutter_hunk_extract（共享）
 
-从业务文件 diff hunk 抽取事实层，**必须使用以下结构化字段**，禁止输出自由文本数组（自由文本无法被后续步骤机械校验，是遗漏的根源）：
+从业务文件 diff hunk 抽取事实层，**必须使用以下结构化字段**，禁止输出自由文本数组（自由文本无法被后续步骤机械校验，是遗漏的根源）。
+
+#### `user_facing` 判定标准
+
+| 判定 | Flutter 中的表现 | 说明 |
+|------|------------------|------|
+| **✅ true** | `StatelessWidget` / `StatefulWidget` 且出现在 widget tree 中被用户直接看到或交互 | 弹窗、页面、卡片、按钮组件等 |
+| **✅ true** | `State<T>` 类，其 `build()` 方法输出用户可见内容 | 虽然是 State 但控制用户可见的 UI |
+| **❌ false** | `CustomPainter` / `CustomClipper` | 绘制辅助，不独立面向用户 |
+| **❌ false** | 纯数据类（`DataClass` / `Model` / `Entity` / `freezed` 生成类） | 无 UI 表现 |
+| **❌ false** | `ChangeNotifier` / `Store` / `Cubit` 等纯状态管理类 | 驱动 UI 但自身不是 UI |
+| **❌ false** | 工具类（`Formatter` / `Validator` / `Helper` / `Extension`） | 无独立用户感知 |
+| **❌ false** | `State<T>` 类，其 `build()` 仅做布局代理（如转发给子 widget） | 无独立用户感知 |
+
+**简化规则**：如果该 class 被删除后，用户在屏幕上能感知到"少了什么"或"某个交互消失了"，就是 `user_facing: true`；否则为 `false`。
 
 ```json
 {

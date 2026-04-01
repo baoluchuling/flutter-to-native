@@ -64,4 +64,21 @@ python3 .ai/t2n/benchmark/run_benchmark.py --case <case-id> --repo-root <native-
 - Layer 2/3 FAIL：chain_map 或 edit_tasks 覆盖不足，在 `verify_report.md` 附录中标注 WARN，列入 finalize_report 遗留风险
 - 基准测试结果追加到 `verify_report.md` 附录；**Layer 4 FAIL 导致 verify_result 降级为 FAIL**
 
+## 脚本异常处理
+
+`atlas_verify.py verify` 可能因运行时错误退出（非 verify FAIL，而是 Python 异常）。常见场景：
+
+| exit code | 含义 | 处理 |
+|-----------|------|------|
+| 0 | 成功 | 读取 `verify_result.json` 判断 PASS/WARN/FAIL |
+| 1 | 运行时异常 | 读 stderr，通常是 run 目录中缺少必要产物文件（如 `edit_tasks.json` 不存在） |
+| 3 | 文件未找到 | 检查 `--run-dir` 路径和 `--repo-root` 是否正确 |
+
+**排查步骤**：
+1. 读 stderr traceback，定位缺失的文件或字段
+2. 若缺少产物文件 → 确认前序步骤已正确执行（如 `edit_tasks.json` 由 Step 3 生成）
+3. 若 `--swift-parse-check` / `--kotlin-parse-check` 报错 → 确认编译工具链可用（Xcode / Gradle）
+
+> 脚本异常时修复输入后重跑即可，不需要回退到 Step 6。已有的代码改动不受影响。
+
 产物：`<platform>/verify_report.md`、`<platform>/verify_result.json`
