@@ -23,6 +23,22 @@
 xcodebuild build -scheme <scheme> -destination 'generic/platform=iOS'
 ```
 
+## 版本兼容规则
+
+生成的代码必须兼容 `session_config.json → platform_constraints.ios.deployment_target` 声明的最低版本。常见陷阱：
+
+| API / 语法 | 最低版本 | 低版本替代 |
+|------------|---------|-----------|
+| `async/await` | iOS 13（需 back-deploy）/ iOS 15（原生） | completion handler / Combine |
+| `UISheetPresentationController` | iOS 15 | 自定义 `UIPresentationController` |
+| `UIMenu` / `UIAction` | iOS 14 | `UIAlertController` actionSheet |
+| `AttributedString`（Swift 原生） | iOS 15 | `NSAttributedString` |
+| `UIContentUnavailableConfiguration` | iOS 17 | 自定义空态视图 |
+| `\.sensoryFeedback` (SwiftUI) | iOS 17 | `UIImpactFeedbackGenerator` |
+| `@Observable` macro | iOS 17 | `ObservableObject` + `@Published` |
+
+高版本 API 必须用 `if #available(iOS XX, *)` 保护且提供 fallback。
+
 ## 代码规范锚点
 
 参照目标仓库 CLAUDE.md（典型项：懒加载、NoHighlightButton、颜色/字体扩展、SnapKit 约束）

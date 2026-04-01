@@ -12,6 +12,11 @@
 - **持久化 key 一致性**：key 格式是否与 `hunk_facts.json` 中的 `persistence_keys` 一致
 - **埋点完整性**：`hunk_facts.json` 中 `analytics_events` 列出的事件是否全部有对应实现
 - **AB 门控**：`hunk_facts.json` 中 `ab_gates` 列出的条件判断是否在 Native 中有等价实现
+- **API 版本兼容性**：逐一检查新增/修改代码中调用的系统 API 和第三方库 API 是否兼容 `session_config.json` 中 `platform_constraints` 声明的部署目标。重点关注：
+  - iOS：`UISheetPresentationController`（15+）、`UIContentUnavailableConfiguration`（17+）、`\.sensoryFeedback`（17+）、`async/await`（需 13+ back-deploy 或 15+）、`AttributedString`（15+）等常见高版本 API
+  - Android：Compose（minSdk 21+）、`WindowInsetsCompat`（API level 差异）、`LifecycleOwner` 扩展等
+  - 已使用 `#available` / `Build.VERSION.SDK_INT` 保护的高版本 API 需检查 fallback 分支是否有等价实现（不能为空或仅 return）
+  - 发现未保护的高版本 API → `CHANGES_REQUESTED`
 
 ## 审查结论
 

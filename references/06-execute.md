@@ -51,6 +51,18 @@
 
 > 依赖预检不阻塞"无需额外集成"的情况，仅在真正缺失第三方库时暂停。
 
+## API 版本兼容约束（硬约束）
+
+生成的 Native 代码必须兼容 `session_config.json` 中 `platform_constraints` 声明的部署目标版本：
+
+- **iOS**：所有使用的 API 必须在 `deployment_target` 版本可用。禁止无条件使用高于部署目标的 API（如部署目标 iOS 14.0，禁止直接使用 `UISheetPresentationController`（iOS 15+）、`UIContentUnavailableConfiguration`（iOS 17+）等）
+  - 若 Flutter 功能依赖的 API 仅在更高版本可用 → 必须使用 `if #available(iOS XX, *)` 包裹，并提供低版本 fallback 实现
+  - Swift 语法约束同理（如 `deployment_target < 15.0` 时不可使用 `async/await`，除非项目已引入 back-deploy concurrency）
+- **Android**：所有使用的 API 必须在 `minSdk` 版本可用。高版本 API 需 `if (Build.VERSION.SDK_INT >= XX)` 保护，或使用 AndroidX compat 库
+- **第三方依赖版本**：使用已集成依赖的 API 时，确认该 API 在 `platform_constraints.dependencies` 中记录的版本已存在（如 SnapKit 5.x vs 4.x 的 API 差异）
+
+> 编译验证（Step 6 末尾）能捕获部分版本问题，但不能依赖编译兜底——编译不检查运行时 availability，且 `@available` 遗漏不会报编译错误。
+
 ## 改码前必做（显式约定）
 
 - 每个 task 的目标符号（类/方法/文件）改动前，必须先执行：
