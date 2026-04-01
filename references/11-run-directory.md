@@ -72,4 +72,4 @@
 └── acceptance_alignment.md
 ```
 
-> `native-profile-v2/` 不存放在 run 目录中。它位于 Native 仓库的 `.ai/t2n/native-profile-v2/` 下，由人工维护，包含 `feature_registry.json` 和 `host_mapping.json`。Planner 通过 `--profile-v2-dir` 参数引用。动态代码理解（调用链、依赖分析）由 `/understand-anything` 提供，两者互补。
+> Native 代码结构理解统一由 `/understand-anything` 提供（知识图谱）。Planner 通过 `--llm-resolution-path` 获取 LLM 映射结果，通过启发式文件名匹配兜底。

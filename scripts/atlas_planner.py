@@ -12,10 +12,7 @@ from pathlib import Path
 from collections import Counter
 
 from atlas_intent_bridge import (
-    ProfileV2,
-    load_profile_v2,
     merge_touchpoints,
-    select_touchpoints_from_profile,
     touchpoints_from_llm_resolution,
 )
 
@@ -272,7 +269,6 @@ ANCHOR_PATH_STOPWORDS = {
 @dataclass
 class PlanningInputs:
     repo_root: Path
-    profile_v2_dir: Path
     run_dir: Path
     prd_path: Path | None
     flutter_root: Path | None
@@ -291,7 +287,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     plan = subparsers.add_parser("plan", help="Generate planning artifacts for a requirement sync run")
     plan.add_argument("--repo-root", required=True, help="Path to the target iOS repository")
-    plan.add_argument("--profile-v2-dir", required=True, help="Path to repo-profile-core outputs (feature_registry.json + host_mapping.json)")
     plan.add_argument("--run-dir", required=True, help="Path to .ai/t2n/runs/<run-id>")
     plan.add_argument("--prd-path", help="Optional path to PRD or requirement document")
     plan.add_argument("--flutter-root", help="Optional Flutter repository root")
@@ -318,15 +313,6 @@ def ensure_dir(path: Path) -> None:
 def ensure_repo_root(repo_root: Path) -> None:
     if not repo_root.exists() or not repo_root.is_dir():
         raise FileNotFoundError(f"repo root not found or unreadable: {repo_root}")
-
-
-def ensure_profile_v2_dir(profile_v2_dir: Path) -> None:
-    if not profile_v2_dir.exists() or not profile_v2_dir.is_dir():
-        raise FileNotFoundError(f"profile v2 dir not found or unreadable: {profile_v2_dir}")
-    required = ["feature_registry.json", "host_mapping.json"]
-    missing = [name for name in required if not (profile_v2_dir / name).exists()]
-    if missing:
-        raise FileNotFoundError(f"profile v2 dir missing required files: {', '.join(missing)}")
 
 
 def load_json(path: Path) -> dict:
@@ -1050,7 +1036,6 @@ def infer_requirement_scope(inputs: PlanningInputs, evidence: dict) -> dict:
 
 def build_inputs(args: argparse.Namespace) -> PlanningInputs:
     repo_root = Path(args.repo_root).expanduser().resolve()
-    profile_v2_dir = Path(args.profile_v2_dir).expanduser().resolve()
     run_dir = Path(args.run_dir).expanduser().resolve()
     prd_path = Path(args.prd_path).expanduser().resolve() if args.prd_path else None
     flutter_root = Path(args.flutter_root).expanduser().resolve() if args.flutter_root else None
@@ -1061,7 +1046,6 @@ def build_inputs(args: argparse.Namespace) -> PlanningInputs:
     llm_resolution_path = Path(args.llm_resolution_path).expanduser().resolve() if getattr(args, "llm_resolution_path", None) else None
     return PlanningInputs(
         repo_root=repo_root,
-        profile_v2_dir=profile_v2_dir,
         run_dir=run_dir,
         prd_path=prd_path,
         flutter_root=flutter_root,
@@ -1077,7 +1061,6 @@ def build_inputs(args: argparse.Namespace) -> PlanningInputs:
 
 def validate_inputs(inputs: PlanningInputs) -> None:
     ensure_repo_root(inputs.repo_root)
-    ensure_profile_v2_dir(inputs.profile_v2_dir)
     if not any([inputs.prd_path, inputs.flutter_path, inputs.flutter_digest_path, inputs.pr_diff_path, inputs.tests_path]):
         raise FileNotFoundError("at least one of --prd-path, --flutter-path, --flutter-digest-path, --pr-diff-path, --tests-path is required")
     if not any([inputs.flutter_path, inputs.flutter_digest_path, inputs.pr_diff_path]):
@@ -1649,24 +1632,15 @@ def build_contract(inputs: PlanningInputs) -> dict:
     scope_keywords = scope_keyword_bundle["ordered"]
     primary_key_files, supporting_key_files = split_key_files(inputs, evidence)
     digest_scope = evidence.get("flutter_digest", {}).get("scope", {})
-    profile_v2: ProfileV2 = load_profile_v2(inputs.profile_v2_dir)
 
     external_touchpoints: list[dict] = []
-    external_touchpoints.extend(
-        select_touchpoints_from_profile(
-            profile=profile_v2,
-            keyword_bundle=scope_keyword_bundle,
-            evidence=evidence,
-            limit=8,
-        )
-    )
     if inputs.llm_resolution_path:
         llm_resolution = load_json(inputs.llm_resolution_path)
         if isinstance(llm_resolution, dict):
             external_touchpoints.extend(
                 touchpoints_from_llm_resolution(
                     resolution=llm_resolution,
-                    profile=profile_v2,
+                    profile=None,
                     repo_root=inputs.repo_root,
                     limit=8,
                 )
@@ -1764,7 +1738,6 @@ def build_contract(inputs: PlanningInputs) -> dict:
             "language": "swift",
             "ui_framework": "uikit",
             "repo_root": str(inputs.repo_root),
-            "profile_path": str(inputs.profile_v2_dir),
             "module_hint": inputs.flutter_path.name if inputs.flutter_path else inputs.requirement_name,
             "write_mode": "apply_after_approval",
         },

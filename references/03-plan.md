@@ -5,21 +5,6 @@
 先由 CLI 的 LLM 生成 `llm_plan.json`（建议放到 `<run-dir>/<platform>/llm_plan.json`），再执行 planner 落盘与校验。
 
 > 命令须在 Native 仓库根目录下执行，`scripts/atlas_planner.py` 相对于该根目录。
->
-> Planner 内部通过 `atlas_intent_bridge.py` 加载 profile-v2 数据并转换为 touchpoints，无需单独调用。
-
-### profile-v2 与 understand-anything 的分工
-
-两者**互补**，不互相替代：
-
-| 用途 | 数据源 | 说明 |
-|------|--------|------|
-| **feature → file 的静态映射** | `--profile-v2-dir`（`feature_registry.json` + `host_mapping.json`） | 由人工维护的功能域→代码实体映射表，planner 用它做初步触点匹配和得分 |
-| **调用链 / 上下文 / 架构理解** | `/understand-anything`（knowledge graph） | Step 2.4 查询用，提供动态的代码关系、调用链、依赖分析 |
-
-- `--profile-v2-dir` 是 `atlas_planner.py plan` 的**必填参数**，缺失会报错
-- `understand-anything` 是 Step 2.4 `native_chain_match` 的**必用工具**，不经过 planner 脚本
-- 两者数据不重叠：profile-v2 是"哪个功能在哪些文件里"，understand-anything 是"这些文件之间怎么调用"
 
 ```bash
 python3 scripts/atlas_planner.py plan \
@@ -27,7 +12,6 @@ python3 scripts/atlas_planner.py plan \
   --run-dir <run-dir>/<platform> \
   --requirement-id <REQ-ID> \
   --requirement-name <REQ-NAME> \
-  --profile-v2-dir <native-project-root>/.ai/t2n/native-profile-v2 \
   [--prd-path <prd.md>] \
   [--flutter-path <flutter-feature-path>] \
   [--flutter-digest-path <flutter-digest.json>] \
@@ -82,13 +66,12 @@ python3 scripts/atlas_planner.py plan \
 |-----------|------|------|
 | 0 | 成功 | 继续 Step 4 |
 | 1 | 运行时异常（如 JSON 解析失败、字段缺失） | 读 stderr，修复 `llm_plan.json` 中的格式问题后重跑 |
-| 3 | 文件未找到（profile-v2 缺失、run-dir 不存在） | 检查路径参数是否正确，确认 `feature_registry.json` 和 `host_mapping.json` 存在 |
+| 3 | 文件未找到（run-dir 不存在、必要输入文件缺失） | 检查 `--run-dir`、`--repo-root`、`--llm-resolution-path` 路径是否正确 |
 
 **通用排查步骤**：
 1. 读 stderr 中的完整 traceback，定位到具体的 Python 文件和行号
 2. 若错误在 `normalize_llm_task()` → `llm_plan.json` 中某个 task 字段格式不对，修正后重跑
-3. 若错误在 `load_profile_v2()` → profile-v2 目录结构不对，检查 `--profile-v2-dir` 路径
-4. 若错误在 `ensure_run_dir()` → `--run-dir` 路径不存在或无写入权限
+3. 若错误在 `ensure_run_dir()` → `--run-dir` 路径不存在或无写入权限
 
 > 脚本异常不等于 plan_validation FAIL。异常是"脚本没跑完"，FAIL 是"跑完了但校验不通过"。异常时修复输入后重跑即可，不需要回退到 Step 2。
 
