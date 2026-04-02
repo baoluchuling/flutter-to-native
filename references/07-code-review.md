@@ -30,6 +30,20 @@ Step 6 使用 `superpowers:subagent-driven-development` 时，每个 task 内部
   - 已使用 `#available` / `Build.VERSION.SDK_INT` 保护的高版本 API 需检查 fallback 分支是否有等价实现（不能为空或仅 return）
   - 发现未保护的高版本 API → `CHANGES_REQUESTED`
 
+## 禁止 "deferred" 的场景
+
+以下问题**不得标为 deferred / 后续跟进 / 已知遗留**，必须在 code_review 阶段解决：
+
+1. **行为契约违反**：task 的 `behavior_contract` 中定义的交互（如 onPay 触发支付）未实现 → `CHANGES_REQUESTED`
+2. **死代码**：新建的 UI 文件未被任何代码调用（缺少集成入口）→ `CHANGES_REQUESTED`
+3. **资产缺失**：task 的 `asset_dependencies` 中列出的图片资源未复制到 Native 项目 → `CHANGES_REQUESTED`
+4. **本地化缺失**：task 的 `l10n_keys` 中列出的翻译 key 未添加到本地化文件 → `CHANGES_REQUESTED`
+5. **埋点缺失**：`hunk_facts.json` 中 `analytics_events` 列出的事件在 Native 中无对应实现 → `CHANGES_REQUESTED`
+
+仅以下情况允许 deferred：
+- 需要第三方团队配合（如后端接口未就绪）且已在 `cross_platform_gap.md` 中记录
+- 用户在 Step 5 (confirm) 中明确同意简化
+
 ## 审查结论
 
 - `APPROVED`：可进入 verify
@@ -42,3 +56,16 @@ Step 6 使用 `superpowers:subagent-driven-development` 时，每个 task 内部
 产物：`<platform>/code_review_report.md`（记录审查结论、问题列表、修复状态）
 
 finalize 前置检查新增：`code_review_report.md` 存在且结论为 `APPROVED` 或 `APPROVED_WITH_COMMENTS`（所有 issues 已标记 resolved）。
+
+## Gate Checklist
+
+完成 Step 7 前，逐条核对：
+
+- [ ] `<platform>/code_review_report.md` 已生成
+- [ ] 结论为 `APPROVED` 或 `APPROVED_WITH_COMMENTS`（非 `CHANGES_REQUESTED`）
+- [ ] 所有 Critical issues 已标记 resolved（附修复 commit）
+- [ ] 所有 Important issues 已标记 resolved 或有明确合理的 deferred 理由（仅限需第三方配合的场景）
+- [ ] 无行为契约违反被标为 deferred
+- [ ] 无死代码被标为 deferred
+- [ ] 无资产/本地化/埋点缺失被标为 deferred
+- [ ] 若有 CHANGES_REQUESTED → 修复后已重新 review 并获得 APPROVED

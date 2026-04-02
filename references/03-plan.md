@@ -57,6 +57,9 @@ python3 scripts/atlas_planner.py plan \
   - `native_chain`：Native 调用链（入口->编排->落点）
   - `evidence`：映射依据（路径/符号/调用关系）
 - 验收断言（完成标准）
+- 资产依赖（`asset_dependencies`）：该 task 所需的图片/图标资源列表（来自 Flutter `assets/` 目录），每项含：Flutter 路径、Native 目标路径、格式要求（@2x.png）。无资产依赖时显式标注 `[]`
+- 本地化 key（`l10n_keys`）：该 task 引入的新翻译 key 列表，每项含：key 名、默认英文文案、使用位置。无新增 key 时显式标注 `[]`
+- 集成入口（`integration_point`）：新建 UI 文件必须指明由哪个已有文件/方法调用（如 `ShortViewController.showCardViews()` 调用 `MembershipUnlockV2PopupView.show()`）。修改已有文件时此字段可省略
 
 ## 脚本异常处理
 
@@ -83,3 +86,17 @@ python3 scripts/atlas_planner.py plan \
 - `native_touchpoints.md`
 - `risk_report.md`
 - `plan_validation.md`
+
+## Gate Checklist
+
+完成 Step 3 前，逐条核对：
+
+- [ ] `<platform>/intent.md` 已生成
+- [ ] `<platform>/edit_tasks.json` 已生成，meta.analysis_mode / generated_by / platform 字段完整
+- [ ] 每个 task 含必要字段：title / capability / feature_scope / trigger_lifecycle / behavior_contract / native_touchpoints / edit_anchors / mapping_proof / acceptance
+- [ ] 每个 task 含 `asset_dependencies`（图片资源列表，无则为 `[]`）
+- [ ] 每个 task 含 `l10n_keys`（本地化 key 列表，无则为 `[]`）
+- [ ] 每个新建 UI 文件的 task 含 `integration_point`（指明调用方）
+- [ ] `<platform>/edit_tasks.md` 已生成（人类可读版本）
+- [ ] `<platform>/native_touchpoints.md` 已生成（含修改文件表 + 新建文件表 + 图片资源表）
+- [ ] `<platform>/risk_report.md` 已生成

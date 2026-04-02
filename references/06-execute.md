@@ -104,7 +104,54 @@
 **commit**: <sha>
 ```
 
-## 进入 Step 6.5 前必须通过编译验证
+## 资产与本地化落地（强制，所有 task 完成后执行）
+
+在编译验证之前，必须完成以下检查与落地：
+
+### 图片资源迁移
+1. 遍历 `edit_tasks.json` 中所有 task 的 `asset_dependencies` 字段
+2. 对每个资源：
+   - 从 Flutter 项目 `assets/` 目录复制源文件
+   - 转换为 Native 格式（iOS：仅 @2x.png，放入 Assets.xcassets 的 `.imageset` 目录）
+   - 确认文件存在且格式正确
+3. 若 `asset_dependencies` 中有资源在 Flutter 项目中不存在（如 SVG 需转换），记录到 `execution_log.md` 并尝试从 Figma 下载
+
+### 本地化 key 落地
+1. 遍历 `edit_tasks.json` 中所有 task 的 `l10n_keys` 字段
+2. 对每个 key：
+   - 在 Native 项目的本地化文件中添加（iOS: `Localizable.strings`，Android: `strings.xml`）
+   - 至少添加英文（默认语言）和中文
+3. 若项目使用远程本地化（服务端下发），确认 key 已在代码中通过本地化方法调用（如 `Lg.t(for:)`），本地文件作为 fallback
+
+### 埋点实现
+1. 遍历 `flutter/hunk_facts.json` 中所有文件的 `analytics_events` 字段
+2. 对每个事件，确认 Native 代码中有对应的埋点调用
+3. 若 Native 埋点框架与 Flutter 不同（如 BeiDou vs SensorsData），使用 Native 框架的等价调用
+4. 未实现的埋点事件必须在本步骤补齐，**不得标为"后续"**
+
+### 集成验证
+1. 遍历所有新建的 UI 文件，确认每个文件至少有一个外部调用入口（即不是死代码）
+2. 若发现新建文件未被引用，必须在对应的 `integration_point` 位置添加调用代码
+3. 确认 `integration_point` 中指定的调用方确实调用了新建文件
+
+> 以上任一项未完成，禁止进入编译验证和 code_review。
+
+## 进入 Step 7 前必须通过编译验证
 
 所有 task 完成后，执行平台对应的编译命令（参见 platform profile "编译验证命令"）。
-编译失败必须修复后再进入 Step 6.5 code_review，**不得带编译错误进入 code_review 或 verify**。
+编译失败必须修复后再进入 Step 7 code_review，**不得带编译错误进入 code_review 或 verify**。
+
+## Gate Checklist
+
+完成 Step 6 前，逐条核对：
+
+- [ ] 所有 task 均已实现并有对应 commit
+- [ ] `<platform>/execution_log.md` 已生成，每个 task 有记录（改动文件 + 改动内容 + commit SHA）
+- [ ] `<platform>/implementation_plan.md` 已生成
+- [ ] **图片资源**：`edit_tasks.json` 中所有 `asset_dependencies` 列出的资源已复制到 Native 项目（非 placeholder / SF Symbol）
+- [ ] **本地化 key**：`edit_tasks.json` 中所有 `l10n_keys` 列出的 key 已添加到本地化文件（至少英文）
+- [ ] **埋点**：`hunk_facts.json` 中所有 `analytics_events` 在 Native 代码中有对应实现
+- [ ] **集成入口**：每个新建 UI 文件至少有一个外部调用入口（grep 确认有调用）
+- [ ] **行为契约**：每个 task 的 `behavior_contract` 中定义的交互/副作用均已实现（不得有 stub/placeholder 回调）
+- [ ] 新建文件已注册到项目文件（xcodeproj / build.gradle）
+- [ ] `<platform>/understand_chat_log.md` 已追加执行阶段的查询记录

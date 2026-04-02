@@ -25,10 +25,13 @@ python3 scripts/atlas_verify.py verify \
 - **diff 覆盖反向检查（强制）**：从 `flutter/hunk_facts.json` 出发，逐字段核查 Native 实现是否覆盖：
   - `new_classes`：每个 `user_facing: true` 的 class 是否有对应 Native 文件或类
   - `persistence_keys`：每个持久化 key 格式是否在 Native 代码中有等价实现（key 名、变量结构）
-  - `analytics_events`：每个埋点事件是否在 Native 中有对应调用（允许平台差异但必须显式标注）
+  - `analytics_events`：每个埋点事件是否在 Native 中有对应调用（允许平台差异但必须显式标注）。**未实现的埋点事件直接 FAIL**，不得 WARN
   - `ab_gates`：每个 AB 门控是否在 Native 中有等价条件判断
   - 反向检查结果输出为 `verify_report.md` 中的 "diff 覆盖矩阵" 表，逐行标注 PASS / WARN / FAIL / SKIP（含原因）
   - 若任一 `user_facing: true` class 无 Native 对应，`verify_result` 必须为 `FAIL`
+- **资产落地检查（强制）**：逐项检查 `edit_tasks.json` 中所有 task 的 `asset_dependencies`，确认每个图片资源文件在 Native 项目中存在。缺失 → `FAIL`
+- **本地化落地检查（强制）**：逐项检查 `edit_tasks.json` 中所有 task 的 `l10n_keys`，确认每个 key 在本地化文件中存在（至少英文）。缺失 → `FAIL`
+- **集成入口检查（强制）**：逐项检查所有新建 UI 文件的 `integration_point`，用 grep 确认 Native 代码中存在对该文件/类的调用。无调用 → `FAIL`（死代码）
 - 若上述任一项缺失或不一致，`verify_result` 必须为 `FAIL`
 
 ## verify FAIL 修复循环
@@ -82,3 +85,19 @@ python3 .ai/t2n/benchmark/run_benchmark.py --case <case-id> --repo-root <native-
 > 脚本异常时修复输入后重跑即可，不需要回退到 Step 6。已有的代码改动不受影响。
 
 产物：`<platform>/verify_report.md`、`<platform>/verify_result.json`
+
+## Gate Checklist
+
+完成 Step 8 前，逐条核对：
+
+- [ ] `<platform>/verify_report.md` 已生成，包含：按 task 验收断言 + diff 覆盖矩阵
+- [ ] `<platform>/verify_result.json` 已生成，result 为 PASS 或 WARN（非 FAIL）
+- [ ] diff 覆盖矩阵中 `new_classes`（user_facing）全部 PASS
+- [ ] diff 覆盖矩阵中 `persistence_keys` 全部 PASS
+- [ ] diff 覆盖矩阵中 `analytics_events` 全部 PASS（非 WARN/FAIL）
+- [ ] diff 覆盖矩阵中 `ab_gates` 全部 PASS
+- [ ] 资产落地检查：所有 `asset_dependencies` 资源文件在 Native 项目中存在
+- [ ] 本地化落地检查：所有 `l10n_keys` 在本地化文件中存在
+- [ ] 集成入口检查：所有新建 UI 文件在 Native 代码中有调用（grep 确认）
+- [ ] 若结果为 FAIL → 已走修复循环（修代码→重审→重验）
+- [ ] 若结果为 WARN → WARN 项已记录，将列入 finalize_report 遗留风险

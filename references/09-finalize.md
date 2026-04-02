@@ -61,3 +61,15 @@
 - 我是否把备选方案当成默认实现输出？
 - 我是否把未完成结果伪装成已完成？
 - 任一答案为 `是` 时，先修正输出，再交付。
+
+## Gate Checklist
+
+完成 Step 9 前，逐条核对：
+
+- [ ] 前置检查 4 项全部满足（verify_result / verify_report / plan_validation / code_review_report）
+- [ ] `finalize_report.md` 已落盘到 run 目录（非仅对话输出）
+- [ ] 完成任务列表：每个 task 有 commit SHA
+- [ ] 遗留风险：所有 verify WARN 项已列入，附处置意见
+- [ ] 回滚点：起始/结束 commit SHA 准确
+- [ ] 最终自检 6 项全部回答"否"
+- [ ] `finalize_report.md` 中无"后续待办"或"deferred"项（除非用户在 Step 5 明确同意）

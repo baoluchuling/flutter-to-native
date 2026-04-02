@@ -26,3 +26,13 @@
 未完成 Figma 采集时，`plan_validation` 的 UI 强制约束直接 `FAIL`，不得以"后续补充"绕过。
 
 产物：`flutter_changes.md`、`figma_inputs.md`（UI 变更时）
+
+## Gate Checklist
+
+完成 Step 1 前，逐条核对：
+
+- [ ] `flutter/flutter_changes.md` 已生成且包含：改动文件列表、能力摘要、`含新增 UI 页面` 字段
+- [ ] `flutter/changes.diff` 已保存到 run 目录
+- [ ] 若 `含新增 UI 页面 = true`：`flutter/figma_inputs.md` 已生成，每个 UI 能力有对应 Figma 链接和截图
+- [ ] 若 `含新增 UI 页面 = true` 且 `session_config.json` 中无 Figma 链接：已回到 Step 0.4 补充
+- [ ] 改动文件列表排除了非功能性文件（.claude/、biz_scan/、l10n 翻译生成文件等）

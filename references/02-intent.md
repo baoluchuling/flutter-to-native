@@ -148,3 +148,17 @@
 - `mapping_disambiguation`（markdown 文本，平台独立）
 - `tasks`（按功能分组，含行为契约与逻辑约束，平台独立）
 - `tasks[].mapping_proof`（真实映射证明）
+
+## Gate Checklist
+
+完成 Step 2 前，逐条核对：
+
+- [ ] `flutter/capability_slices.md` 已生成，包含所有能力切片和"新增 Class 归属表"
+- [ ] "新增 Class 归属表"覆盖了 diff 中所有新增 class（含私有类）
+- [ ] `flutter/hunk_facts.json` 已生成，每个文件的 7 个字段全部存在（无省略）
+- [ ] `flutter/flutter_chain_map.json` 已生成，每个 CAP 有 trigger/state_changes/key_interactions/side_effects
+- [ ] `flutter_chain_map.json` 的 `uncovered_facts` 为空数组（或每条有处置说明）
+- [ ] `<platform>/understand_chat_log.md` 已生成，记录了所有 understand-chat 查询
+- [ ] `<platform>/native_chain_candidates.json` 已生成，每个 CAP 有 Top-K 候选
+- [ ] `<platform>/mapping_disambiguation.md` 已生成，每个 CAP 有 Top1 选择理由和 Top2 淘汰原因
+- [ ] `<platform>/llm_plan.json` 已生成，包含 meta（含 mapping_pipeline）+ intent_markdown + tasks
