@@ -145,8 +145,8 @@
 
 完成 Step 6 前，逐条核对：
 
-- [ ] 所有 task 均已实现并有对应 commit
-- [ ] `<platform>/execution_log.md` 已生成，每个 task 有记录（改动文件 + 改动内容 + commit SHA）
+- [ ] 所有 task 的代码均已编写完成
+- [ ] `<platform>/execution_log.md` 已生成，每个 task 有记录（改动文件 + 改动内容）
 - [ ] `<platform>/implementation_plan.md` 已生成
 - [ ] **图片资源**：`edit_tasks.json` 中所有 `asset_dependencies` 列出的资源已复制到 Native 项目（非 placeholder / SF Symbol）
 - [ ] **本地化 key**：`edit_tasks.json` 中所有 `l10n_keys` 列出的 key 已添加到本地化文件（至少英文）
@@ -155,3 +155,4 @@
 - [ ] **行为契约**：每个 task 的 `behavior_contract` 中定义的交互/副作用均已实现（不得有 stub/placeholder 回调）
 - [ ] 新建文件已注册到项目文件（xcodeproj / build.gradle）
 - [ ] `<platform>/understand_chat_log.md` 已追加执行阶段的查询记录
+- [ ] **以上全部 PASS 后**，统一执行一次 git commit（禁止在此之前提交）
