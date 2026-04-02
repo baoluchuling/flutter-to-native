@@ -16,10 +16,10 @@
 ## 完成任务
 
 ### iOS
-- TASK-XX: <功能名> — commit <sha>
+- TASK-XX: <功能名>
 
 ### Android
-- TASK-XX: <功能名> — commit <sha>
+- TASK-XX: <功能名>
 
 ## 遗留风险
 - [iOS][WARN] <verify/code_review WARN 条目，含处置意见>
@@ -28,15 +28,8 @@
 ## 人工项
 - <需要人工跟进的事项>
 
-## 回滚点
-
-### iOS
-- 起始 commit: <sha>（执行前最后一个 commit）
-- 结束 commit: <sha>（所有 task 完成后）
-
-### Android
-- 起始 commit: <sha>
-- 结束 commit: <sha>
+## 变更文件清单
+- <列出所有新建和修改的文件，供用户 commit 时参考>
 
 ## 后续建议
 - <技术债/优化建议>

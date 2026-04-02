@@ -100,8 +100,6 @@
 - Path/To/File（新增 / 修改）
 
 **改动内容**: （1-3 句说明做了什么，对应 hunk_facts 哪个字段）
-
-**commit**: <sha>
 ```
 
 ## 资产与本地化落地（强制，所有 task 完成后执行）
@@ -155,4 +153,4 @@
 - [ ] **行为契约**：每个 task 的 `behavior_contract` 中定义的交互/副作用均已实现（不得有 stub/placeholder 回调）
 - [ ] 新建文件已注册到项目文件（xcodeproj / build.gradle）
 - [ ] `<platform>/understand_chat_log.md` 已追加执行阶段的查询记录
-- [ ] **以上全部 PASS 后**，统一执行一次 git commit（禁止在此之前提交）
+- [ ] 未执行任何 git commit（整个 SOP 流程不提交，由用户自行决定）
