@@ -53,23 +53,41 @@
 
 在生成 finalize_report 时，执行以下操作生成最终汇总。
 
-### 1. 从 session JSONL 统计主 Session 用量
+### 1. 从 session JSONL 按步骤统计用量
+
+读取 `token_tracking.json` 中的 `step_lines`（每步开始时的 JSONL 行号），分段统计：
 
 ```python
 import json, re
+
 tracking = json.load(open("<run-dir>/token_tracking.json"))
-totals = {"input_tokens": 0, "output_tokens": 0,
-          "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}
-with open(tracking["session_jsonl"]) as f:
-    for i, line in enumerate(f):
-        if i < tracking["start_line"]: continue
-        for m in re.finditer(r'"usage":\{[^}]*"output_tokens":\d+[^}]*\}', line):
-            for key in totals:
-                km = re.search(rf'"{key}":(\d+)', m.group())
-                if km: totals[key] += int(km.group(1))
+jsonl_path = tracking["session_jsonl"]
+step_lines = tracking["step_lines"]  # {"step_0": 100, "step_1": 150, ...}
+
+# 读取所有行
+with open(jsonl_path) as f:
+    lines = f.readlines()
+
+# 按步骤分段统计
+steps = sorted(step_lines.items(), key=lambda x: int(x[0].split("_")[1]))
+step_tokens = {}
+
+for idx, (step_name, start) in enumerate(steps):
+    end = steps[idx + 1][1] if idx + 1 < len(steps) else len(lines)
+    tokens = 0
+    for line in lines[start:end]:
+        for m in re.finditer(r'"output_tokens":(\d+)', line):
+            tokens += int(m.group(1))
+        for m in re.finditer(r'"input_tokens":(\d+)', line):
+            tokens += int(m.group(1))
+        for m in re.finditer(r'"cache_creation_input_tokens":(\d+)', line):
+            tokens += int(m.group(1))
+        for m in re.finditer(r'"cache_read_input_tokens":(\d+)', line):
+            tokens += int(m.group(1))
+    step_tokens[step_name] = tokens
 ```
 
-### 2. 读取 subagent 明细表，按 model 和 step 分组
+### 2. 读取 subagent 明细表，按 model 分组求和
 
 ### 3. 写入汇总到 token_usage.md（三张表）
 
@@ -96,10 +114,16 @@ with open(tracking["session_jsonl"]) as f:
 
 | 步骤 | Tokens | 费用 |
 |------|--------|------|
-| Step 0-5 (主 Session 规划) | xxx | $x.xx |
-| Step 6 (实现) | xxx | $x.xx |
-| Step 7 (审查) | xxx | $x.xx |
-| Step 8-9 (验收交付) | xxx | $x.xx |
+| Step 0 — 会话初始化 | xxx | $x.xx |
+| Step 1 — 变更盘点 | xxx | $x.xx |
+| Step 2 — 需求意图提炼 | xxx | $x.xx |
+| Step 3 — 同步任务规划 | xxx | $x.xx |
+| Step 4 — 规划校验 | xxx | $x.xx |
+| Step 5 — 人工确认 | xxx | $x.xx |
+| Step 6 — 同步实施 | xxx | $x.xx |
+| Step 7 — 代码审查 | xxx | $x.xx |
+| Step 8 — 验收测试 | xxx | $x.xx |
+| Step 9 — 总结交付 | xxx | $x.xx |
 ```
 
 **费用计算**：主 Session 按 input $15/MTok + cache_read $1.875/MTok + output $75/MTok；Subagent 按 haiku $1.25/MTok、sonnet $15/MTok、opus $75/MTok（output 价，简化计算）。

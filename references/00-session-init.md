@@ -18,7 +18,8 @@ Skill 触发后第一个动作，在任何用户交互之前执行：
    {
      "session_jsonl": "<SESSION_JSONL 路径>",
      "start_line": <START_LINE>,
-     "start_time": "<ISO 时间>"
+     "start_time": "<ISO 时间>",
+     "step_lines": { "step_0": <START_LINE> }
    }
    ```
 
