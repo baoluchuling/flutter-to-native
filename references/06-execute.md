@@ -94,6 +94,16 @@
 禁止仅按 `plan` 产物执行（`plan-only`）。
 禁止跳过 understand-explain 直接改码。
 
+## Subagent Token 记录（每次 Agent 返回后立即执行）
+
+每次 Agent 工具调用返回后，从返回结果中提取 `<usage>total_tokens: xxx</usage>` 和 `duration_ms: xxx`，立即追加一行到 `<run-dir>/token_usage.md`：
+
+```markdown
+| N | Step 6 | TASK-XX 任务名 | model_tier | total_tokens | duration_ms/1000 s |
+```
+
+不得事后批量补填。code review 的 Agent 调用也需记录（标注 Step 7）。
+
 ## execution_log.md（追加格式，不覆盖旧记录）
 
 ```markdown

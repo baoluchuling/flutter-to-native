@@ -32,7 +32,7 @@
 - <列出所有新建和修改的文件，供用户 commit 时参考>
 
 ## Token 用量
-<从 token_usage.md 中复制汇总表，含模型分布和预估费用>
+<按以下流程生成，不得手动估算>
 
 ## 后续建议
 - <技术债/优化建议>
@@ -49,6 +49,64 @@
 - `差异、阻塞与风险`：显式列出当前无法确定、无法完成、尚未与 Flutter 对齐的部分，以及权限 / 生命周期 / 线程 / 回调 / UI 差异风险。
 - `验收清单`：按"是否与 Flutter 一致"列出主流程、交互反馈、状态切换、错误处理、接口参数、返回结果、页面返回恢复、边界情况。
 
+## Token 用量汇总（必做）
+
+在生成 finalize_report 时，执行以下步骤汇总 token 用量：
+
+### 1. 汇总 Subagent 用量
+
+读取 `<run-dir>/token_usage.md` 中的 subagent 明细表，按 model 分组求和。
+
+### 2. 统计主 Session 用量
+
+从 `<run-dir>/token_tracking.json` 读取 `session_jsonl` 和 `start_line`，执行：
+
+```python
+import json, re
+tracking = json.load(open("<run-dir>/token_tracking.json"))
+totals = {"input_tokens": 0, "output_tokens": 0,
+          "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}
+api_calls = 0
+with open(tracking["session_jsonl"]) as f:
+    for i, line in enumerate(f):
+        if i < tracking["start_line"]: continue
+        for m in re.finditer(r'"usage":\{[^}]*"output_tokens":\d+[^}]*\}', line):
+            api_calls += 1
+            for key in totals:
+                km = re.search(rf'"{key}":(\d+)', m.group())
+                if km: totals[key] += int(km.group(1))
+```
+
+### 3. 写入汇总到 token_usage.md
+
+在 subagent 明细表之后追加：
+
+```markdown
+## 主 Session
+
+| 指标 | 数量 |
+|------|------|
+| API 调用次数 | {api_calls} |
+| Input tokens | {input_tokens} |
+| Output tokens | {output_tokens} |
+| Cache creation | {cache_creation_input_tokens} |
+| Cache read | {cache_read_input_tokens} |
+
+## 费用汇总
+
+| 项目 | Tokens | 费用 |
+|------|--------|------|
+| 主 Session Input (新) | {input + cache_creation} | @$15/MTok |
+| 主 Session Input (缓存) | {cache_read} | @$1.875/MTok |
+| 主 Session Output | {output} | @$75/MTok |
+| Subagent (haiku) | {sum} | @$1.25/MTok |
+| Subagent (sonnet) | {sum} | @$15/MTok |
+| Subagent (opus) | {sum} | @$75/MTok |
+| **总计** | | **$x.xx** |
+```
+
+### 4. 将汇总复制到 finalize_report.md 的"Token 用量"段
+
 ## 最终自检（必做）
 
 - 我是否擅自简化了需求，或把复杂模块拆到后续处理？
@@ -64,8 +122,10 @@
 
 - [ ] 前置检查 4 项全部满足（verify_result / verify_report / plan_validation / code_review_report）
 - [ ] `finalize_report.md` 已落盘到 run 目录（非仅对话输出）
-- [ ] 完成任务列表：每个 task 有 commit SHA
+- [ ] 完成任务列表：每个 task 已列出
 - [ ] 遗留风险：所有 verify WARN 项已列入，附处置意见
 - [ ] 回滚点：起始/结束 commit SHA 准确
 - [ ] 最终自检 6 项全部回答"否"
 - [ ] `finalize_report.md` 中无"后续待办"或"deferred"项（除非用户在 Step 5 明确同意）
+- [ ] `token_usage.md` 已包含 subagent 明细 + 主 session 汇总 + 费用汇总
+- [ ] `finalize_report.md` 的"Token 用量"段已填入汇总数据
