@@ -60,7 +60,17 @@ python3 scripts/atlas_planner.py plan \
 - 资产依赖（`asset_dependencies`）：该 task 所需的图片/图标资源列表（来自 Flutter `assets/` 目录），每项含：Flutter 路径、Native 目标路径、格式要求（@2x.png）。无资产依赖时显式标注 `[]`
 - 本地化 key（`l10n_keys`）：该 task 引入的新翻译 key 列表，每项含：key 名、默认英文文案、使用位置。无新增 key 时显式标注 `[]`
 - 集成入口（`integration_point`）：新建 UI 文件必须指明由哪个已有文件/方法调用（如 `ShortViewController.showCardViews()` 调用 `MembershipUnlockV2PopupView.show()`）。修改已有文件时此字段可省略
-- 模型等级（`model_tier`）：该 task 派发 subagent 时使用的模型等级，取值 `haiku` / `sonnet` / `opus`。判定依据见 Step 6 "Subagent 模型选择"。**同一 task 内所有 `edit_anchors` 必须属于同一复杂度等级**，若跨等级则必须拆分为多个 task
+- 模型等级（`model_tier`）：该 task 派发 subagent 时使用的模型等级。Step 6 执行时直接使用此字段指定模型，不做二次判断。取值和判定规则如下：
+
+  | model_tier | 判定条件 | 典型任务 |
+  |-----------|---------|---------|
+  | **haiku** | 改动 ≤2 个文件，无跨文件依赖，纯追加字段/配置/key | 数据模型字段扩展、AB 开关注册、样式微调（颜色/间距）、本地化 key 添加 |
+  | **sonnet** | 改动 3-5 个文件，或需理解现有代码模式后仿写 | 流程编排扩展、交互入口修改、现有组件重构、集成接入 |
+  | **opus** | 新建大文件（>300行）、涉及复杂 UI 布局、需 Figma 设计判断 | 新建弹窗/页面（含 dark/light 主题）、复杂状态管理 |
+
+  **约束：同一 task 内所有 `edit_anchors` 必须属于同一复杂度等级**，若跨等级则必须拆分为多个 task。
+
+  **code review** 始终使用 **opus**。
 
 ## 脚本异常处理
 
