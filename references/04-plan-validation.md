@@ -21,6 +21,13 @@
   - 枚举 Flutter diff 中新增的 l10n key（`app_en.arb` 等 ARB 文件中的新增 key）
   - 若 task 的 UI 中使用了这些 key 对应的文案，对应 task 的 `l10n_keys` 必须非空
   - 任一资产/l10n 依赖缺失 → `WARN`（不阻塞，但必须在 plan_validation 输出中标注）
+- 校验 task 复杂度一致性（`V17`，**强制运行，不得省略**）：
+  - 每个 task 必须有 `model_tier` 字段（haiku / sonnet / opus）
+  - 检查每个 task 的 `edit_anchors` 是否属于同一复杂度等级：
+    - 纯字段/配置追加（新增属性、注册 key、调整颜色值）→ haiku
+    - 修改现有逻辑、仿写现有 pattern、集成接入 → sonnet
+    - 新建大文件（>300 行）、复杂 UI 布局、需 Figma 设计判断 → opus
+  - 若同一 task 内 edit_anchors 跨等级（如既有 haiku 级的字段追加又有 sonnet 级的逻辑扩展）→ `FAIL`，必须回到 Step 3 拆分
 - 校验 hunk_facts 未覆盖事实（`V14`）：检查 `flutter_chain_map.json` 中的 `uncovered_facts` 字段：
   - 字段不存在或为空数组：`PASS`
   - 字段非空：每条 uncovered fact 必须附有处置说明（已合并入某 CAP，或明确豁免原因）；无处置说明则 `WARN`；存在 `user_facing: true` 的 class 未覆盖则 `FAIL`

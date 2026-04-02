@@ -60,6 +60,7 @@ python3 scripts/atlas_planner.py plan \
 - 资产依赖（`asset_dependencies`）：该 task 所需的图片/图标资源列表（来自 Flutter `assets/` 目录），每项含：Flutter 路径、Native 目标路径、格式要求（@2x.png）。无资产依赖时显式标注 `[]`
 - 本地化 key（`l10n_keys`）：该 task 引入的新翻译 key 列表，每项含：key 名、默认英文文案、使用位置。无新增 key 时显式标注 `[]`
 - 集成入口（`integration_point`）：新建 UI 文件必须指明由哪个已有文件/方法调用（如 `ShortViewController.showCardViews()` 调用 `MembershipUnlockV2PopupView.show()`）。修改已有文件时此字段可省略
+- 模型等级（`model_tier`）：该 task 派发 subagent 时使用的模型等级，取值 `haiku` / `sonnet` / `opus`。判定依据见 Step 6 "Subagent 模型选择"。**同一 task 内所有 `edit_anchors` 必须属于同一复杂度等级**，若跨等级则必须拆分为多个 task
 
 ## 脚本异常处理
 

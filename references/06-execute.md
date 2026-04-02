@@ -52,44 +52,6 @@
 
 > 错误的模型选择方向是"安全起见全用 opus"。正确的方向是"能用便宜的就用便宜的，只在需要时升级"。
 
-### Task 内分层派发（按文件复杂度拆分 sub-dispatch）
-
-一个 task 可能包含不同复杂度的文件改动。**禁止用最复杂子项的模型覆盖所有子项**。派发前按以下流程拆分：
-
-**拆分判定：**
-1. 遍历 task 的 `edit_anchors`，为每个文件标注复杂度等级（haiku / sonnet / opus）
-2. 若所有文件同一等级 → 单次 dispatch，使用该等级模型
-3. 若文件跨等级 → 按等级分组，拆为多个 sub-dispatch，**便宜的先跑**
-
-**拆分规则：**
-
-```
-edit_anchors 分析：
-  ┌─ 纯追加字段/配置/key ──────────── haiku 组
-  ├─ 修改现有逻辑/仿写模式 ─────────── sonnet 组  
-  └─ 新建大文件/复杂 UI ────────────── opus 组
-
-执行顺序：haiku 组 → sonnet 组 → opus 组（便宜优先）
-```
-
-**示例 — Task 7（ChargeManager 流程编排）的正确拆分：**
-
-| sub-dispatch | 文件 | 操作 | 模型 |
-|-------------|------|------|------|
-| 7a | ChargeFileManager.swift | 新增 11 个持久化方法（仿写现有 pattern） | haiku |
-| 7b | ChargeFloatView.swift | 修改 touchesEnded 加 if/else | haiku |
-| 7c | ChargeManager.swift | 新增短篇挽留流程（理解现有 getPopCharge 后扩展） | sonnet |
-
-这样 Task 7 的成本从全用 opus（36K tokens × $75/MTok）变为 haiku×2 + sonnet×1，节省 ~70%。
-
-**sub-dispatch 之间的上下文传递：**
-- 后续 sub-dispatch 的 prompt 中，说明前序 sub-dispatch 已完成的改动（文件名 + 做了什么）
-- 禁止让后续 sub-dispatch 重新读前序已改过的文件全文（浪费 token），只需告知"ChargeFileManager 已新增 saveShortRetainData 等 11 个方法"
-
-**不拆分的例外：**
-- task 只涉及 1 个文件 → 不拆
-- 文件间有强耦合（如 A 文件的实现依赖 B 文件的具体代码结构，非接口调用）→ 合并为一个 dispatch
-- 拆分后某组只有 1 个极小改动（<10 行）→ 合并到相邻组，减少 dispatch 开销
 
 ## 执行输入（硬约束）
 
