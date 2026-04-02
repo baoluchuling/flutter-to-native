@@ -87,6 +87,8 @@ for idx, (step_name, start) in enumerate(steps):
     step_tokens[step_name] = tokens
 ```
 
+主 Session 模型名从 JSONL 中提取（`"model"` 字段，如 `claude-opus-4-6`），用于"按模型"表的行标题。
+
 ### 2. 读取 subagent 明细表，按 model 分组求和
 
 ### 3. 写入汇总到 token_usage.md（三张表）
@@ -105,7 +107,7 @@ for idx, (step_name, start) in enumerate(steps):
 
 | 模型 | Tokens | 费用 |
 |------|--------|------|
-| 主 Session | xxx | $x.xx |
+| {主session实际模型名，从JSONL的model字段提取，如 claude-opus-4-6} | xxx | $x.xx |
 | Subagent haiku | xxx | $x.xx |
 | Subagent sonnet | xxx | $x.xx |
 | Subagent opus | xxx | $x.xx |
