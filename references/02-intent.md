@@ -161,4 +161,5 @@
 - [ ] `<platform>/understand_chat_log.md` 已生成，记录了所有 understand-chat 查询
 - [ ] `<platform>/native_chain_candidates.json` 已生成，每个 CAP 有 Top-K 候选
 - [ ] `<platform>/mapping_disambiguation.md` 已生成，每个 CAP 有 Top1 选择理由和 Top2 淘汰原因
-- [ ] `<platform>/llm_plan.json` 已生成，包含 meta（含 mapping_pipeline）+ intent_markdown + tasks
+- [ ] `<platform>/llm_plan.json` 已生成，包含 meta + intent_markdown + tasks
+- [ ] `llm_plan.json` 的 `meta.mapping_pipeline` 包含五个子步骤路径（capability_split / flutter_hunk_extract / flutter_chain_extract / native_chain_match / disambiguation）

@@ -8,7 +8,7 @@
 - 校验弹窗入口语义（`V11`）：task 含 popup/dialog/弹窗 时，首条 `native_chain` 必须是 `show/present`，且 `entry_semantics=popup_show`，否则 `FAIL`
 - 校验跨端差异闭环（`V12`）：当 task 标注 `cross_platform_gap=true` 时，若缺少 `cross_platform_gap.md` / `design_tradeoff.md` / `acceptance_alignment.md` 任一项，直接 `FAIL`
 - 校验 diff 一致性（`V13`，`diff-consistency`，**强制运行，不得省略**）：
-  - 若 Native 方案无法完整解释 Flutter diff 中的结构变化（例如明确存在双弹窗分流但仅规划单弹窗改造），直接 `FAIL`
+  - 逐个 CAP 检查：Native task 是否覆盖了该 CAP 在 Flutter 中的所有行为（触发入口、状态流转、交互分支、副作用）。若某个 CAP 无对应 Native task，或 Native task 的行为契约明显缺失 Flutter 已有的分支（如 Flutter 有 V1/V2 双弹窗但 Native 只规划了单弹窗），直接 `FAIL`
   - **新增 class 覆盖检查**：枚举 Flutter diff 中所有新增 `class`（含私有类 `class _Foo`），逐一确认 `edit_tasks.md` 中存在对应 task 或触点子项；若任一新增 class 未被覆盖，直接 `FAIL`，并列出未覆盖的 class 名称
 - 校验新建文件集成入口（`V15`，**强制运行，不得省略**）：
   - 枚举 `edit_tasks.json` 中所有新建（Create）的 UI 文件（弹窗 / 页面 / 视图）

@@ -62,7 +62,7 @@ finalize 前置检查新增：`code_review_report.md` 存在且结论为 `APPROV
 完成 Step 7 前，逐条核对：
 
 - [ ] `<platform>/code_review_report.md` 已生成
-- [ ] 结论为 `APPROVED` 或 `APPROVED_WITH_COMMENTS`（非 `CHANGES_REQUESTED`）
+- [ ] 结论为 `APPROVED` 或 `APPROVED_WITH_COMMENTS`（若曾为 `CHANGES_REQUESTED`，必须已修复并重新 review 通过）
 - [ ] 所有 Critical issues 已标记 resolved
 - [ ] 所有 Important issues 已标记 resolved 或有明确合理的 deferred 理由（仅限需第三方配合的场景）
 - [ ] 无行为契约违反被标为 deferred
