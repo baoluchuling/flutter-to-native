@@ -11,14 +11,13 @@
 ### Step A — 用 superpowers:writing-plans 生成实现计划
 
 调用 `superpowers:writing-plans`，将 `edit_tasks.json` 中的 tasks 转为 superpowers 格式的实现计划：
-- 每个 task 对应一个 superpowers task，含：目标文件列表、实现步骤、测试方式、commit 命令
+- 每个 task 对应一个 superpowers task，含：目标文件列表、实现步骤、测试方式
 - 计划保存到 `<run-dir>/<platform>/implementation_plan.md`
 - 计划中每个 task 必须包含以下步骤（不得省略）：
   1. 调用 `understand-explain <目标类/文件>` 查询调用链与上下文（结果追加到 `understand_chat_log.md`）
   2. 按 `flutter_chain_map.json` 对应 CAP 核对实现范围
   3. 编写 Native 代码
   4. 将改动追加记录到 `execution_log.md`
-  5. commit
 
 ### Step B — 用 superpowers 执行计划（二选一）
 
@@ -121,11 +120,13 @@ Step 6 的实现 subagent 和 Step 7 的 code review subagent 都需记录。不
 
 ### 图片资源迁移
 1. 遍历 `edit_tasks.json` 中所有 task 的 `asset_dependencies` 字段
-2. 对每个资源：
-   - 从 Flutter 项目 `assets/` 目录复制源文件
-   - 转换为 Native 格式（iOS：仅 @2x.png，放入 Assets.xcassets 的 `.imageset` 目录）
-   - 确认文件存在且格式正确
-3. 若 `asset_dependencies` 中有资源在 Flutter 项目中不存在（如 SVG 需转换），记录到 `execution_log.md` 并尝试从 Figma 下载
+2. 对每个资源，按以下优先级获取：
+   - **优先**：从 Flutter 项目 `assets/` 或 `assets/images/` 目录复制源文件
+   - **备选**：若 Flutter 中为 SVG 格式，使用 `rsvg-convert` 转为 PNG（指定 @2x 尺寸）
+   - **兜底**：若 Flutter 中不存在，从 Figma 设计稿下载（使用 `mcp__plugin_figma_figma__get_design_context` 获取资源 URL，然后 `curl` 下载）
+   - **禁止**：使用 SF Symbol 或 placeholder 替代
+3. 转换为 Native 格式（iOS：仅 @2x.png，放入 Assets.xcassets 的 `.imageset` 目录，创建 Contents.json）
+4. 确认每个资源文件存在且为有效图片（`file` 命令验证为 PNG/JPEG）
 
 ### 本地化 key 落地
 1. 遍历 `edit_tasks.json` 中所有 task 的 `l10n_keys` 字段

@@ -108,6 +108,7 @@ python3 scripts/atlas_planner.py plan \
 - [ ] 每个 task 含 `asset_dependencies`（图片资源列表，无则为 `[]`）
 - [ ] 每个 task 含 `l10n_keys`（本地化 key 列表，无则为 `[]`）
 - [ ] 每个新建 UI 文件的 task 含 `integration_point`（指明调用方）
+- [ ] 每个 task 含 `model_tier`（haiku / sonnet / opus），且同一 task 内 edit_anchors 属于同一复杂度等级
 - [ ] `<platform>/edit_tasks.md` 已生成（人类可读版本）
 - [ ] `<platform>/native_touchpoints.md` 已生成（含修改文件表 + 新建文件表 + 图片资源表）
 - [ ] `<platform>/risk_report.md` 已生成
