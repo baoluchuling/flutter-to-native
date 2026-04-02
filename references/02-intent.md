@@ -14,6 +14,8 @@
 
 将 Flutter diff 拆分为原子能力（例如：引言更多、解锁按钮禁用、挽留倒计时）。
 
+**大文件变更展开规则（强制）**：对 diff 中变更量 >200 行的文件，不得用"重构"、"改造"等词笼统概括，必须在对应 CAP 中逐条列出该文件的具体行为变更（新增了什么交互、修改了什么状态流转、删除了什么分支）。若一个文件的变更跨多个能力，必须拆分到不同 CAP，不得全部堆入一个 CAP。
+
 **必须在 `capability_slices.md` 末尾附加 "新增 Class 归属表"**，列出 diff 中所有新增 class 及其归属 CAP。格式：
 
 ```markdown
@@ -79,6 +81,10 @@
 
 - **必须显式提取同文件内所有新增 `class`**（含私有类 `class _Foo`）；`user_facing: true` 的 class 必须在后续 `capability_split` 中归入某个 CAP，不得因为是私有/嵌套类而跳过。
 - 若某字段在该文件 diff 中无对应内容，输出空数组 `[]`，禁止省略字段。
+- **内容质量抽查（强制）**：hunk_facts.json 生成后，对 diff 变更量 >200 行的文件（通过 `git diff --stat` 确认），逐个检查：
+  - `new_classes` 数量是否与 diff 中实际新增的 class 数量一致（用 `grep "^+.*class " <diff>` 交叉验证）
+  - `new_methods` 是否覆盖了 diff 中新增的 public/internal 方法（不要求覆盖 private helper）
+  - 若发现遗漏，必须补充后继续，不得带着不完整的 hunk_facts 进入 Step 2.3
 - 产物：`flutter/hunk_facts.json`
 
 ### 2.3 flutter_chain_extract（共享）
@@ -114,6 +120,15 @@
 - **目标**：需要看到什么效果/找到什么
 
 **注意**：查询关键词必须使用 Native 侧的类名/方法名/功能词，不要用 Flutter 侧的叫法，否则知识图谱无法匹配到节点
+
+**集成入口精度要求（强制）**：对于每个需要新建 UI 文件的能力，查询**不能停在目录/Controller 级别**，必须追问到具体的 `file:method:line`。例如：
+- ❌ "ShortViewController 渲染首页时调用"（目录级，不可执行）
+- ✅ "ShortViewController.reader(_:prologueHeaderView:chapterIndex:pageIndex:):932 — 当前使用 ShortAuthorBookCardView，需替换为 ShortHeaderInfoView"（方法级，可直接编码）
+
+查询流程：
+1. 先问"该能力在 Native 中由哪个 Controller/Manager 负责"（定位模块）
+2. 再问"该 Controller 中，具体是哪个方法/delegate 回调负责渲染/触发该 UI"（定位方法）
+3. 用 `grep` 或 `Read` 确认该方法确实存在并记录行号（锁定行号）
 
 每次查询结果必须追加记录到 `<platform>/understand_chat_log.md`（见 [understand_chat_log 格式](./10-understand-chat-log.md)）
 

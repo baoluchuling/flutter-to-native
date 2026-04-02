@@ -56,10 +56,21 @@ python3 scripts/atlas_planner.py plan \
   - `flutter_entrypoints`：Flutter 入口函数/文件
   - `native_chain`：Native 调用链（入口->编排->落点）
   - `evidence`：映射依据（路径/符号/调用关系）
-- 验收断言（完成标准）
+- 验收断言（完成标准）。**新建 UI 文件的 task 必须包含以下验收断言**（不得省略）：
+  `grep -rn "<ClassName>" <项目目录> --include="*.swift" | grep -v "<自身文件名>" 至少有 1 条匹配`
+  此断言确保新建的 UI 不是死代码——subagent 看到这条验收断言就知道光创建文件不算完成，必须在 `integration_point` 指向的位置接入调用后才能交差
 - 资产依赖（`asset_dependencies`）：该 task 所需的图片/图标资源列表（来自 Flutter `assets/` 目录），每项含：Flutter 路径、Native 目标路径、格式要求（@2x.png）。无资产依赖时显式标注 `[]`
 - 本地化 key（`l10n_keys`）：该 task 引入的新翻译 key 列表，每项含：key 名、默认英文文案、使用位置。无新增 key 时显式标注 `[]`
-- 集成入口（`integration_point`）：新建 UI 文件必须指明由哪个已有文件/方法调用（如 `ShortViewController.showCardViews()` 调用 `MembershipUnlockV2PopupView.show()`）。修改已有文件时此字段可省略
+- 集成入口（`integration_point`）：新建 UI 文件必须指明由哪个已有文件/方法调用。**格式强制为 `文件名.方法名:行号 — 操作描述`**，自然语言描述（如"某个 Controller 调用"）直接 FAIL。示例：
+  - ✅ `ShortViewController.reader(_:prologueHeaderView:chapterIndex:pageIndex:):932 — 替换现有 ShortAuthorBookCardView 为 ShortHeaderInfoView`
+  - ✅ `ChargeManager.openShortRetainDialog(_:scene:countdownTime:isFakeCountdown:):231 — 调用 ShortRetainPopupView.show()`
+  - ❌ `ShortViewController 渲染首页时调用`（无方法名、无行号、不可执行）
+  
+  修改已有文件时此字段可省略。
+  
+  **集成包含在新建 task 内，不拆为独立 task**：`integration_point` 指向的文件必须出现在该 task 的 `edit_anchors` 中。新建 UI 和接入调用方是同一个 task 的职责——拆成两个 task 会引入 handoff，导致"文件创建了但没人接入"的问题。task 的 `edit_anchors` 应同时包含新建文件和调用方文件。
+  
+  同时，task 的 `behavior_contract` 必须包含调用方的集成逻辑描述：如何实例化、传什么参数、处理什么回调、替换还是新增、条件判断等。这些信息从 Flutter diff 中调用方的代码提取（Flutter 中新建 UI 和调用它的代码通常在同一次 diff 中）。
 - 模型等级（`model_tier`）：该 task 派发 subagent 时使用的模型等级。Step 6 执行时直接使用此字段指定模型，不做二次判断。取值和判定规则如下：
 
   | model_tier | 判定条件 | 典型任务 |

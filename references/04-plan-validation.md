@@ -12,8 +12,11 @@
   - **新增 class 覆盖检查**：枚举 Flutter diff 中所有新增 `class`（含私有类 `class _Foo`），逐一确认 `edit_tasks.md` 中存在对应 task 或触点子项；若任一新增 class 未被覆盖，直接 `FAIL`，并列出未覆盖的 class 名称
 - 校验新建文件集成入口（`V15`，**强制运行，不得省略**）：
   - 枚举 `edit_tasks.json` 中所有新建（Create）的 UI 文件（弹窗 / 页面 / 视图）
-  - 每个新建 UI 文件必须有 `integration_point` 字段，指明由哪个已有文件/方法实例化并调用
-  - 若新建 UI 文件缺少 `integration_point`，或 `integration_point` 指向的文件不在任何 task 的 `edit_anchors` 中，直接 `FAIL`
+  - 每个新建 UI 文件必须有 `integration_point` 字段，**格式为 `文件名.方法名:行号 — 操作描述`**
+  - `integration_point` 为自然语言描述（如"某个 Controller 调用"、"渲染首页时调用"）→ 直接 `FAIL`，必须回到 Step 2.4 补充 understand-chat 查询精确到方法级
+  - **该 task 自身的 `edit_anchors` 必须同时包含新建文件和 `integration_point` 指向的调用方文件**。若 edit_anchors 中只有新建文件、没有调用方文件 → 直接 `FAIL`（说明集成动作未纳入 task 范围）
+  - **该 task 的 `acceptance`（验收断言）必须包含 grep 检查**：`grep -rn "<ClassName>" <项目目录> --include="*.swift" | grep -v "<自身文件名>" 至少有 1 条匹配`。若验收断言中无此条 → 直接 `FAIL`
+  - **必须用 grep 实际验证 integration_point 目标存在**：执行 `grep -n "<方法名>" <指向的文件>`，在 plan_validation 输出中**贴出命令和结果**，确认目标方法确实存在。方法不存在 → `FAIL`
   - 此校验防止出现"创建了 View 但无人调用"的死代码
 - 校验资产与本地化完整性（`V16`，**强制运行，不得省略**）：
   - 枚举 Flutter diff 中新增的图片资源文件（`assets/`、`assets/images/` 下的 png/svg/webp）
@@ -31,6 +34,14 @@
 - 校验 hunk_facts 未覆盖事实（`V14`）：检查 `flutter_chain_map.json` 中的 `uncovered_facts` 字段：
   - 字段不存在或为空数组：`PASS`
   - 字段非空：每条 uncovered fact 必须附有处置说明（已合并入某 CAP，或明确豁免原因）；无处置说明则 `WARN`；存在 `user_facing: true` 的 class 未覆盖则 `FAIL`
+- 校验 AB 门控处置方案（`V18`，**强制运行，不得省略**）：
+  - 枚举 `hunk_facts.json` 中所有文件的 `ab_gates` 字段
+  - 每个 AB 门控必须有明确的处置方案，不得全部标为 SKIP。允许的处置方案：
+    - **实现等价判断**：在 Native 代码中实现对应的 AB 条件判断（如 `if ABTest.isEnabled("xxx")` ），在对应 task 的 `behavior_contract` 中标注
+    - **硬编码开启/关闭**：明确说明该功能在 iOS 端默认开启或关闭，并在代码中留下可配置的开关位置
+    - **服务端已配置**：确认服务端已为 iOS 配置了该 AB 实验，在 task 中标注服务端配置名
+  - 若任一 AB 门控无处置方案或处置方案为"后续处理"/"SKIP" → `WARN`（不阻塞，但必须在 plan_validation 输出中列出并在 finalize_report 中跟踪）
+  - 若 AB 门控控制的是核心功能可见性（如"是否展示 V2 弹窗"）且无处置方案 → `FAIL`
 
 ## 结论
 
