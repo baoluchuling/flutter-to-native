@@ -96,13 +96,13 @@
 
 ## Subagent Token 记录（每次 Agent 返回后立即执行）
 
-每次 Agent 工具调用返回后，从返回结果中提取 `<usage>total_tokens: xxx</usage>` 和 `duration_ms: xxx`，立即追加一行到 `<run-dir>/token_usage.md`：
+每次 Agent 工具调用返回后，从返回结果中提取 `<usage>total_tokens: xxx</usage>` 和 `duration_ms: xxx`，立即追加一行到 `<run-dir>/token_usage.md` 的明细表：
 
 ```markdown
-| N | Step 6 | TASK-XX 任务名 | model_tier | total_tokens | duration_ms/1000 s |
+| N | Step X | TASK-XX 任务名 | model | tokens | 耗时 |
 ```
 
-不得事后批量补填。code review 的 Agent 调用也需记录（标注 Step 7）。
+Step 6 的实现 subagent 和 Step 7 的 code review subagent 都需记录。不得事后批量补填。
 
 ## execution_log.md（追加格式，不覆盖旧记录）
 

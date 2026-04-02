@@ -51,59 +51,58 @@
 
 ## Token 用量汇总（必做）
 
-在生成 finalize_report 时，执行以下步骤汇总 token 用量：
+在生成 finalize_report 时，执行以下操作生成最终汇总。
 
-### 1. 汇总 Subagent 用量
-
-读取 `<run-dir>/token_usage.md` 中的 subagent 明细表，按 model 分组求和。
-
-### 2. 统计主 Session 用量
-
-从 `<run-dir>/token_tracking.json` 读取 `session_jsonl` 和 `start_line`，执行：
+### 1. 从 session JSONL 统计主 Session 用量
 
 ```python
 import json, re
 tracking = json.load(open("<run-dir>/token_tracking.json"))
 totals = {"input_tokens": 0, "output_tokens": 0,
           "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}
-api_calls = 0
 with open(tracking["session_jsonl"]) as f:
     for i, line in enumerate(f):
         if i < tracking["start_line"]: continue
         for m in re.finditer(r'"usage":\{[^}]*"output_tokens":\d+[^}]*\}', line):
-            api_calls += 1
             for key in totals:
                 km = re.search(rf'"{key}":(\d+)', m.group())
                 if km: totals[key] += int(km.group(1))
 ```
 
-### 3. 写入汇总到 token_usage.md
+### 2. 读取 subagent 明细表，按 model 和 step 分组
+
+### 3. 写入汇总到 token_usage.md（三张表）
 
 在 subagent 明细表之后追加：
 
 ```markdown
-## 主 Session
+## 总计
 
 | 指标 | 数量 |
 |------|------|
-| API 调用次数 | {api_calls} |
-| Input tokens | {input_tokens} |
-| Output tokens | {output_tokens} |
-| Cache creation | {cache_creation_input_tokens} |
-| Cache read | {cache_read_input_tokens} |
+| 总 Tokens | xxx |
+| 预估总费用 | $x.xx |
 
-## 费用汇总
+## 按模型
 
-| 项目 | Tokens | 费用 |
+| 模型 | Tokens | 费用 |
 |------|--------|------|
-| 主 Session Input (新) | {input + cache_creation} | @$15/MTok |
-| 主 Session Input (缓存) | {cache_read} | @$1.875/MTok |
-| 主 Session Output | {output} | @$75/MTok |
-| Subagent (haiku) | {sum} | @$1.25/MTok |
-| Subagent (sonnet) | {sum} | @$15/MTok |
-| Subagent (opus) | {sum} | @$75/MTok |
-| **总计** | | **$x.xx** |
+| 主 Session | xxx | $x.xx |
+| Subagent haiku | xxx | $x.xx |
+| Subagent sonnet | xxx | $x.xx |
+| Subagent opus | xxx | $x.xx |
+
+## 按步骤
+
+| 步骤 | Tokens | 费用 |
+|------|--------|------|
+| Step 0-5 (主 Session 规划) | xxx | $x.xx |
+| Step 6 (实现) | xxx | $x.xx |
+| Step 7 (审查) | xxx | $x.xx |
+| Step 8-9 (验收交付) | xxx | $x.xx |
 ```
+
+**费用计算**：主 Session 按 input $15/MTok + cache_read $1.875/MTok + output $75/MTok；Subagent 按 haiku $1.25/MTok、sonnet $15/MTok、opus $75/MTok（output 价，简化计算）。
 
 ### 4. 将汇总复制到 finalize_report.md 的"Token 用量"段
 
