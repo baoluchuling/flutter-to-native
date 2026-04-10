@@ -2,7 +2,7 @@
 
 > 双端同步时，每个平台各执行一次。
 
-先由 CLI 的 LLM 生成 `llm_plan.json`（建议放到 `<run-dir>/<platform>/llm_plan.json`），再执行 planner 落盘与校验。
+将 Step 2 产出的 `llm_plan.json`（位于 `<run-dir>/<platform>/llm_plan.json`）作为输入，执行 planner 落盘。
 
 > 命令须在 Native 仓库根目录下执行，`scripts/atlas_planner.py` 相对于该根目录。
 
@@ -34,6 +34,12 @@ python3 scripts/atlas_planner.py plan \
 - `meta.evidence.pr_diff_sha256` 与本次 diff 文件 sha256 一致（计算方式：`sha256sum <flutter.diff>` 或 `python3 -c "import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" <flutter.diff>`）
 
 不满足以上约束，`plan` 直接失败（拒绝示例产物/占位产物）。
+
+## CAP → task 覆盖规则（强制）
+
+`native_chain_candidates.json` 中 mapping score > 0 的每个 CAP **必须**生成独立 task。禁止将 CAP 合并到其他 task 中作为"备注"或"行为补充"——合并会导致该能力在执行阶段被静默跳过。mapping score = 0 的 CAP 可不生成 task，但必须在 `llm_plan.json` 的 `excluded_caps` 中列出并附理由。
+
+`plan_validation` V13 会逐个校验此规则，违反直接 FAIL。
 
 ## Task 结构要求
 
@@ -82,6 +88,8 @@ python3 scripts/atlas_planner.py plan \
   **约束：同一 task 内所有 `edit_anchors` 必须属于同一复杂度等级**，若跨等级则必须拆分为多个 task。
 
   **code review** 始终使用 **opus**。
+
+  **model_tier 降级检查**：Step 7 code_review 必须检查每个 task 的 model_tier 是否与实际改动复杂度匹配。若 sonnet 级 subagent 产出的代码有明显质量问题（UI 还原度低、状态管理遗漏、边界条件缺失），在 `code_review_report.md` 中标注 `model_tier_mismatch`，修复时升级模型。
 
 ## 脚本异常处理
 

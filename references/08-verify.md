@@ -25,7 +25,7 @@ python3 scripts/atlas_verify.py verify \
 - **diff 覆盖反向检查（强制）**：从 `flutter/hunk_facts.json` 出发，逐字段核查 Native 实现是否覆盖：
   - `new_classes`：每个 `user_facing: true` 的 class 是否有对应 Native 文件或类
   - `persistence_keys`：每个持久化 key 格式是否在 Native 代码中有等价实现（key 名、变量结构）
-  - `analytics_events`：每个埋点事件是否在 Native 中有对应调用（允许平台差异但必须显式标注）。**未实现的埋点事件直接 FAIL**，不得 WARN
+  - `analytics_events`：每个埋点事件是否在 Native 中有对应调用。**未实现的埋点事件直接 FAIL**，不得 WARN。"平台差异"仅指埋点 SDK 名称或方法签名不同（如 BeiDou vs SensorsData），不指事件本身不实现——每个 Flutter 埋点事件必须在 Native 中有功能等价的调用，仅调用方式允许差异
   - `ab_gates`：每个 AB 门控是否在 Native 中有等价条件判断
   - 反向检查结果输出为 `verify_report.md` 中的 "diff 覆盖矩阵" 表，逐行标注 PASS / WARN / FAIL / SKIP（含原因）
   - 若任一 `user_facing: true` class 无 Native 对应，`verify_result` 必须为 `FAIL`
@@ -64,7 +64,7 @@ python3 .ai/t2n/benchmark/run_benchmark.py --case <case-id> --repo-root <native-
 
 - Layer 1（hunk_facts）FAIL：回到 Step 2 补充提取，重新走 plan → validate → execute 循环
 - Layer 4（Native 代码扫描）FAIL：Native 代码中关键词未落地，视同 verify FAIL，必须修复后重新 verify
-- Layer 2/3 FAIL：chain_map 或 edit_tasks 覆盖不足，在 `verify_report.md` 附录中标注 WARN，列入 finalize_report 遗留风险
+- Layer 2/3 FAIL：chain_map 或 edit_tasks 覆盖不足。若涉及 `user_facing: true` 的 class 或 `persistence_key` 未覆盖，升级为 FAIL（同 Layer 4 处理）；仅纯 internal 的覆盖不足保持 WARN，列入 finalize_report 遗留风险
 - 基准测试结果追加到 `verify_report.md` 附录；**Layer 4 FAIL 导致 verify_result 降级为 FAIL**
 
 ## 脚本异常处理

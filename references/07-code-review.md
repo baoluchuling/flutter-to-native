@@ -1,22 +1,58 @@
-# Step 7. code_review（代码审查，**强制执行，不得跳过**）
+# Step 7. code_review（独立 AI 全局审查，**强制执行，不得跳过**）
 
 > execute 完成后、verify 开始前必须执行。code review 发现的问题修完后再进 verify，避免带质量缺陷通过验收。
 
-### 与 Step 6 内置 review 的关系
+## 独立 AI 审查原则
 
-Step 6 使用 `superpowers:subagent-driven-development` 时，每个 task 内部已有 spec compliance + code quality 两阶段 review。Step 7 是**全局审查**，两者**始终都执行、不可互相替代**，职责划分如下：
+Step 6 的单 Task 检查由 **Claude（主 session）** 执行——利用热上下文趁早修复。Step 7 的全局审查必须使用**独立 AI**，确保两次审查的独立性：
 
-| 维度 | Step 6 subagent review（按 task） | Step 7 全局 code_review |
-|------|-----------------------------------|------------------------|
+| 维度 | Step 6 单 Task 检查 (Claude) | Step 7 全局审查 (独立 AI) |
+|------|----------------------------|--------------------------|
+| **审查者** | Claude 主 session | **Codex / code-reviewer subagent / 其他独立 AI** |
 | **粒度** | 单个 task 内的文件 | 本次所有改动文件 |
-| **关注点** | task 实现是否符合 edit_tasks 中的行为契约 | 跨 task 一致性 + 整体质量 |
-| **典型检查** | 单 task 逻辑正确性、接口契约 | 埋点完整性、持久化 key 格式统一、AB 门控全覆盖、API 版本兼容 |
-| **Flutter 对齐** | task 级别的行为匹配 | 整体 `flutter_chain_map.json` 链路对齐 |
-| **线程/内存安全** | task 内的明显问题 | 跨 task 的 delegate 循环引用、Timer 泄漏、多 task 共享状态竞争 |
+| **关注点** | 行为契约、集成、规范、明显 bug、UI 设计值对齐 | 跨 task 一致性 + 整体质量 + 安全 |
+| **修复时机** | 立即修复（上下文热） | 发现问题后回到 Step 6 修复 |
+| **独立性价值** | 同一 AI 审自己的产出，有盲区 | 不同 AI 从零审代码，能发现 Claude 的系统性盲区 |
 
 > 即使 Step 6 使用 inline execution（非 subagent），Step 7 仍然必须执行。
 
-使用 `voltagent-qa-sec:code-reviewer` 对本次所有新建/修改文件执行审查，重点关注：
+### 审查工具选择
+
+读取 `session_config.json` 的 `review_tool` 字段（Step 0 已检测），按该字段决定审查方式：
+
+| review_tool 值 | 使用方式 |
+|----------------|---------|
+| `codex` | 使用 `codex` 命令启动独立审查会话，传入改动文件和审查 prompt |
+| `code-reviewer-subagent` | 使用 `Agent` 工具，`subagent_type: "code-reviewer"`，传入审查 prompt |
+
+**兜底**：若以上均不可用，使用 `superpowers:requesting-code-review`。**禁止降级为 Claude 主 session 目视检查**——主 session 已经在 Step 6 做过检查，Step 7 的价值在于独立视角。`code_review_report.md` 必须存在。
+
+### Codex 审查 Prompt 模板
+
+使用 Codex 时，传入以下 prompt：
+
+```
+审查以下 Native 代码改动，这些代码是从 Flutter 同步到 {iOS/Android} 的实现。
+
+改动文件列表：
+{列出所有新建/修改的文件路径}
+
+审查要点（必须逐项检查）：
+1. 高保真对齐：对照 flutter_chain_map.json 中的链路，检查触发入口、状态流转、副作用、异常分支是否一致
+2. 跨文件一致性：持久化 key 格式是否统一、埋点事件是否全覆盖、AB 门控是否全实现
+3. 线程/内存安全：delegate 循环引用、Timer 未 invalidate、闭包强引用
+4. API 版本兼容：是否有未用 #available / Build.VERSION.SDK_INT 保护的高版本 API
+5. 安全：Token 存储、日志敏感数据、证书验证、组件导出
+
+参考文件：
+- flutter_chain_map.json: {路径}
+- hunk_facts.json: {路径}
+- edit_tasks.json: {路径}
+
+输出格式：对每个问题给出 文件:行号 + 问题描述 + 严重等级(Critical/Important/Minor)
+```
+
+重点关注：
 
 - **高保真对齐**：Native 实现是否与 `flutter_chain_map.json` 中的链路一致（触发入口、状态流转、副作用、异常分支）
 - **代码规范**：参照目标仓库 CLAUDE.md 中定义的平台规范（参见 platform profile "代码规范锚点"）
@@ -30,6 +66,19 @@ Step 6 使用 `superpowers:subagent-driven-development` 时，每个 task 内部
   - 已使用 `#available` / `Build.VERSION.SDK_INT` 保护的高版本 API 需检查 fallback 分支是否有等价实现（不能为空或仅 return）
   - 发现未保护的高版本 API → `CHANGES_REQUESTED`
 
+## 安全加固检查
+
+当同步的代码涉及以下场景时，**必须额外参考 `security-hardening` skill 中对应平台的检查项**：
+
+- Token / 密码存储 → iOS 用 Keychain，Android 用 EncryptedSharedPreferences（禁止 UserDefaults / SharedPreferences 明文）
+- 网络请求 → iOS 确认 ATS 配置，Android 确认 NetworkSecurityConfig（禁止全局关闭证书验证）
+- 深链接 / URL Scheme → 验证 Intent/URL 数据合法性，禁止盲信外部输入
+- WebView → 禁止 JavaScript + FileAccess 同时开启加载不可信内容
+- 日志 → 禁止 NSLog / Log.d 输出 Token、密码、用户隐私（Release 也会被抓取）
+- 组件导出 → Android `exported="false"` 除非确实需要外部访问
+
+发现安全问题 → `CHANGES_REQUESTED`，不得 deferred。
+
 ## 禁止 "deferred" 的场景
 
 以下问题**不得标为 deferred / 后续跟进 / 已知遗留**，必须在 code_review 阶段解决：
@@ -42,7 +91,7 @@ Step 6 使用 `superpowers:subagent-driven-development` 时，每个 task 内部
 
 仅以下情况允许 deferred：
 - 需要第三方团队配合（如后端接口未就绪）且已在 `cross_platform_gap.md` 中记录
-- 用户在 Step 5 (confirm) 中明确同意简化
+- 用户在 Step 5 (confirm) 中**针对特定功能项**明确同意简化（必须可追溯到 Step 5 对话中的具体文字，如"XX 功能可以先不做"）。Step 5 中的通用确认（如"确认开始"）不构成简化许可
 
 ## 审查结论
 

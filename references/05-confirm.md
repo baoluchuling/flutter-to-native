@@ -8,7 +8,7 @@
 
 | 修改范围 | 操作 | 重跑校验 |
 |---------|------|---------|
-| 个别 task 的描述或验收断言 | 直接修改 `edit_tasks.md` / `edit_tasks.json` | 无需重跑 |
+| 个别 task 的描述或验收断言 | 直接修改 `edit_tasks.md` / `edit_tasks.json` | 若修改弱化了验收断言（删除 grep 检查、降低覆盖要求），必须重跑 V15 确认集成入口仍有保障；否则无需重跑 |
 | task 的路径/映射字段（`primary_path` / `native_landing` / `mapping_proof`） | 修改后重跑 V9 + V10 | V9（入口级映射）+ V10（证据可执行性） |
 | task 结构（新增/删除/拆分 task） | 回到 Step 3 重新生成 | 完整 plan_validation（V7-V17） |
 | 拒绝整体方案 | 回到 Step 2 重新规划 | 从 Step 2 开始全部重来 |

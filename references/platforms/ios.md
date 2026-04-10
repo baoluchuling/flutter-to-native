@@ -41,7 +41,9 @@ xcodebuild build -scheme <scheme> -destination 'generic/platform=iOS'
 
 ## 代码规范锚点
 
-参照目标仓库 CLAUDE.md（典型项：懒加载、NoHighlightButton、颜色/字体扩展、SnapKit 约束）
+参照目标仓库 CLAUDE.md（典型项：懒加载、NoHighlightButton、颜色/字体扩展、SnapKit 约束）。
+
+**subagent 传递要求**：Step 6 派发 iOS subagent 时，prompt 中必须包含目标仓库 CLAUDE.md 中的代码规范摘要（至少：懒加载模式、NoHighlightButton 要求、`UIColor(hex:, alpha:)` 颜色用法、`UIFont+Extension` 字体用法、SnapKit 约束写法、`NavigationView` 导航栏用法）。不得依赖 subagent 自行发现 CLAUDE.md——subagent 的工作目录可能不含 CLAUDE.md，或 CLAUDE.md 不在 subagent 的搜索范围内。
 
 ## code_review 重点
 

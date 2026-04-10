@@ -31,7 +31,9 @@
 - `user_facing: ❌` 的 class（CustomPainter / State / 数据类）归属其父 CAP，可不单独建 CAP
 - 此表作为 V13 的校验基准，不得事后补填
 
-产物：`flutter/capability_slices.md`（含新增 Class 归属表）
+**Figma 截图 → CAP 映射（UI 变更时必做）**：capability_split 完成后，回到 `figma_inputs.md`，为每张截图补充 `覆盖 task: CAP-XX`。一张截图可覆盖多个 CAP（用逗号分隔）。未被任何 CAP 覆盖的截图标注 `覆盖 task: 无（仅供参考）`。此映射是 Step 6 Figma 上下文隔离的依据。
+
+产物：`flutter/capability_slices.md`（含新增 Class 归属表）、`flutter/figma_inputs.md`（更新 CAP 映射）
 
 ### 2.2 flutter_hunk_extract（共享）
 
@@ -107,7 +109,7 @@
 
 基于 Native 代码理解对每个能力生成 Top-K Native 候选调用链与得分。
 
-**必须**通过调用 `/understand-anything:understand-chat` skill 完成查询，禁止直接用 Python/Bash 解析 `.understand-anything/knowledge-graph.json`。
+**必须**通过调用 `/understand-anything:understand-chat` skill 完成查询，禁止直接用 Python/Bash 解析 `.understand-anything/knowledge-graph.json`。此禁令同样适用于 Step 6 中的 subagent——subagent prompt 中必须包含此禁令（已在 06-execute.md subagent 强制前言模板中体现）。
 
 查询以下内容（使用 platform profile 中定义的架构词汇）：
 - 该能力对应的 Native 功能域入口（参见 platform profile "编排入口"）
@@ -163,6 +165,8 @@
 - `mapping_disambiguation`（markdown 文本，平台独立）
 - `tasks`（按功能分组，含行为契约与逻辑约束，平台独立）
 - `tasks[].mapping_proof`（真实映射证明）
+
+**CAP → task 强制对应规则**：`native_chain_candidates.json` 中 mapping score > 0 的每个 CAP 必须生成独立 task，禁止将其"合入"其他 task 或标注为"行为备注"。mapping score = 0 的 CAP（如明确标注"不需要 Native 同步"）可不生成 task，但必须在 `llm_plan.json` 中以 `excluded_caps` 字段列出并附理由。
 
 ## Gate Checklist
 

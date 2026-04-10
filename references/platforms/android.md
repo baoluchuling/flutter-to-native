@@ -40,7 +40,9 @@
 
 ## 代码规范锚点
 
-参照目标仓库 CLAUDE.md（典型项：Compose 规范、Coroutine 用法、Hilt Module 组织）
+参照目标仓库 CLAUDE.md（典型项：Compose 规范、Coroutine 用法、Hilt Module 组织）。
+
+**subagent 传递要求**：Step 6 派发 Android subagent 时，prompt 中必须包含目标仓库 CLAUDE.md 中的代码规范摘要。不得依赖 subagent 自行发现 CLAUDE.md。
 
 ## code_review 重点
 

@@ -8,7 +8,8 @@
 - 校验弹窗入口语义（`V11`）：task 含 popup/dialog/弹窗 时，首条 `native_chain` 必须是 `show/present`，且 `entry_semantics=popup_show`，否则 `FAIL`
 - 校验跨端差异闭环（`V12`）：当 task 标注 `cross_platform_gap=true` 时，若缺少 `cross_platform_gap.md` / `design_tradeoff.md` / `acceptance_alignment.md` 任一项，直接 `FAIL`
 - 校验 diff 一致性（`V13`，`diff-consistency`，**强制运行，不得省略**）：
-  - 逐个 CAP 检查：Native task 是否覆盖了该 CAP 在 Flutter 中的所有行为（触发入口、状态流转、交互分支、副作用）。若某个 CAP 无对应 Native task，或 Native task 的行为契约明显缺失 Flutter 已有的分支（如 Flutter 有 V1/V2 双弹窗但 Native 只规划了单弹窗），直接 `FAIL`
+  - **CAP → task 覆盖检查**：枚举 `native_chain_candidates.json` 中所有 mapping score > 0 的 CAP，逐一确认 `edit_tasks.json` 中存在独立 task。任一 score > 0 的 CAP 缺少独立 task → 直接 `FAIL`（不是 WARN），列出缺失的 CAP 编号和名称。CAP 被"合入"其他 task 作为备注不算覆盖——必须有独立 task。
+  - 逐个 CAP 检查：Native task 是否覆盖了该 CAP 在 Flutter 中的所有行为（触发入口、状态流转、交互分支、副作用）。若 Native task 的行为契约明显缺失 Flutter 已有的分支（如 Flutter 有 V1/V2 双弹窗但 Native 只规划了单弹窗），直接 `FAIL`
   - **新增 class 覆盖检查**：枚举 Flutter diff 中所有新增 `class`（含私有类 `class _Foo`），逐一确认 `edit_tasks.md` 中存在对应 task 或触点子项；若任一新增 class 未被覆盖，直接 `FAIL`，并列出未覆盖的 class 名称
 - 校验新建文件集成入口（`V15`，**强制运行，不得省略**）：
   - 枚举 `edit_tasks.json` 中所有新建（Create）的 UI 文件（弹窗 / 页面 / 视图）
@@ -23,7 +24,8 @@
   - 若 task 的 UI 引用了这些资源（通过 Figma 截图可见、或 Flutter 代码中 `Image.asset()` 引用），对应 task 的 `asset_dependencies` 必须非空
   - 枚举 Flutter diff 中新增的 l10n key（`app_en.arb` 等 ARB 文件中的新增 key）
   - 若 task 的 UI 中使用了这些 key 对应的文案，对应 task 的 `l10n_keys` 必须非空
-  - 任一资产/l10n 依赖缺失 → `WARN`（不阻塞，但必须在 plan_validation 输出中标注）
+  - 若 Flutter diff 中明确有新增图片资源且某 UI task 的 Figma 截图中可见该资源，对应 task 的 `asset_dependencies` 为空 → `FAIL`（资产会在 Step 6 中被静默跳过）
+  - 仅当 diff 中资源无法明确关联到任何具体 task 时 → `WARN`（不阻塞，但必须在 plan_validation 输出中标注）
 - 校验 task 复杂度一致性（`V17`，**强制运行，不得省略**）：
   - 每个 task 必须有 `model_tier` 字段（haiku / sonnet / opus）
   - 检查每个 task 的 `edit_anchors` 是否属于同一复杂度等级：
@@ -40,7 +42,7 @@
     - **实现等价判断**：在 Native 代码中实现对应的 AB 条件判断（如 `if ABTest.isEnabled("xxx")` ），在对应 task 的 `behavior_contract` 中标注
     - **硬编码开启/关闭**：明确说明该功能在 iOS 端默认开启或关闭，并在代码中留下可配置的开关位置
     - **服务端已配置**：确认服务端已为 iOS 配置了该 AB 实验，在 task 中标注服务端配置名
-  - 若任一 AB 门控无处置方案或处置方案为"后续处理"/"SKIP" → `WARN`（不阻塞，但必须在 plan_validation 输出中列出并在 finalize_report 中跟踪）
+  - 若任一 AB 门控无处置方案或处置方案为"后续处理"/"SKIP" → `WARN`（不阻塞，但必须在 plan_validation 输出中列出并在 finalize_report 中跟踪）。**此外**，Step 6 subagent prompt 中必须包含该 task 对应的 ab_gates 列表和处置方案（即使是 WARN/SKIP），让 subagent 知道这些条件判断存在并至少留下代码级 TODO 注释标注具体位置
   - 若 AB 门控控制的是核心功能可见性（如"是否展示 V2 弹窗"）且无处置方案 → `FAIL`
 
 ## 结论

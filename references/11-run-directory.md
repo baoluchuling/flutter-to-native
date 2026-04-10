@@ -5,6 +5,8 @@
 ```text
 .ai/t2n/runs/<run-id>/
 ├── session_config.json                 ← Step 0 产物（平台/路径/输入源）
+├── token_tracking.json                 ← Step 0 产物（JSONL 基线 + 按步骤行号）
+├── token_usage.md                      ← Step 0 创建，Step 6/9 追加（subagent 明细 + 汇总）
 ├── flutter/                            ← 共享 Flutter 分析产物
 │   ├── flutter_changes.md              ← Step 1 产物
 │   ├── figma_inputs.md                 ← Step 1 产物（UI 变更时必须）
@@ -46,6 +48,8 @@
 ```text
 .ai/t2n/runs/<run-id>/
 ├── session_config.json                 ← Step 0 产物
+├── token_tracking.json                 ← Step 0 产物
+├── token_usage.md                      ← Step 0 创建，Step 6/9 追加
 ├── flutter_changes.md
 ├── figma_inputs.md
 ├── hunk_facts.json

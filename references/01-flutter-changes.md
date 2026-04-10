@@ -23,6 +23,8 @@
 - **覆盖 task**: CAP-XX
 ```
 
+**截图 → CAP 映射规则**：Step 0 拉取截图时 CAP 编号尚不存在，截图沿用 `{页面名称}_{标签}.png` 命名（如 `引言样式_dark.png`）。Step 2.1 完成 capability_split 后，必须在 `figma_inputs.md` 中为每张截图补充 `覆盖 task: CAP-XX` 映射。Step 6 subagent 根据此映射按 CAP 筛选对应截图，不会混入其他 task 的视觉参考。
+
 未完成 Figma 采集时，`plan_validation` 的 UI 强制约束直接 `FAIL`，不得以"后续补充"绕过。
 
 产物：`flutter_changes.md`、`figma_inputs.md`（UI 变更时）

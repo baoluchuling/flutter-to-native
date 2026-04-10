@@ -132,14 +132,19 @@ for idx, (step_name, start) in enumerate(steps):
 
 ### 4. 将汇总复制到 finalize_report.md 的"Token 用量"段
 
-## 最终自检（必做）
+## 最终自检（必做，需附机械化证据）
 
-- 我是否擅自简化了需求，或把复杂模块拆到后续处理？
-- 我是否把 Flutter 的真实行为替换成了更容易实现的版本？
-- 我是否遗漏了 Flutter 已有的交互、状态、异常、边界、生命周期、异步回调时序？
-- 我是否把备选方案当成默认实现输出？
-- 我是否把未完成结果伪装成已完成？
-- 任一答案为 `是` 时，先修正输出，再交付。
+自检不得仅依赖主观回答。每题必须附客观数据，数据不匹配则自检 FAIL。
+
+| # | 问题 | 必附证据 |
+|---|------|---------|
+| 1 | 我是否擅自简化了需求，或把复杂模块拆到后续处理？ | `flutter_chain_map.json` 中 CAP 数量 vs `edit_tasks.json` 中 task 数量（含 excluded_caps 说明） |
+| 2 | 我是否把 Flutter 的真实行为替换成了更容易实现的版本？ | `verify_report.md` 中 diff 覆盖矩阵的 PASS/FAIL 统计 |
+| 3 | 我是否遗漏了 Flutter 已有的交互、状态、异常、边界、生命周期、异步回调时序？ | `hunk_facts.json` 中 analytics_events 总数 vs `code_review_report.md` 中确认的埋点实现数 |
+| 4 | 我是否把备选方案当成默认实现输出？ | 资产落地检查：`asset_dependencies` 总数 vs Native 项目中实际存在的文件数 |
+| 5 | 我是否把未完成结果伪装成已完成？ | 集成入口 grep 结果：每个新建 UI 文件的外部引用数 |
+
+- 任一答案为 `是` 或数据不匹配时，先修正输出，再交付。
 
 ## Gate Checklist
 
@@ -151,6 +156,6 @@ for idx, (step_name, start) in enumerate(steps):
 - [ ] 遗留风险：所有 verify WARN 项已列入，附处置意见
 - [ ] 回滚点：起始/结束 commit SHA 准确
 - [ ] 最终自检 6 项全部回答"否"
-- [ ] `finalize_report.md` 中无"后续待办"或"deferred"项（除非用户在 Step 5 明确同意）
+- [ ] `finalize_report.md` 中无"后续待办"或"deferred"项（除非用户在 Step 5 **针对特定功能项**明确同意，必须可追溯到对话中的具体文字）
 - [ ] `token_usage.md` 已包含 subagent 明细 + 主 session 汇总 + 费用汇总
 - [ ] `finalize_report.md` 的"Token 用量"段已填入汇总数据
