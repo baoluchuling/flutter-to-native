@@ -156,6 +156,6 @@ for idx, (step_name, start) in enumerate(steps):
 - [ ] 遗留风险：所有 verify WARN 项已列入，附处置意见
 - [ ] 回滚点：起始/结束 commit SHA 准确
 - [ ] 最终自检 6 项全部回答"否"
-- [ ] `finalize_report.md` 中无"后续待办"或"deferred"项（除非用户在 Step 5 **针对特定功能项**明确同意，必须可追溯到对话中的具体文字）
+- [ ] `finalize_report.md` 中无"后续待办"或"deferred"项（除非用户在 Step 5 **针对特定功能项**明确同意，必须可追溯到对话中的具体文字。`auto_mode: true` 时此例外不适用——不允许任何 deferred）
 - [ ] `token_usage.md` 已包含 subagent 明细 + 主 session 汇总 + 费用汇总
 - [ ] `finalize_report.md` 的"Token 用量"段已填入汇总数据
